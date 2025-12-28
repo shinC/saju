@@ -142,8 +142,52 @@ class SajuEngine:
         elif power <= 85: return "태강(太强)"
         else: return "극왕(極旺)"
 
+    def _get_yongsin_info(self, palja, power, me_hj_hanja):
+        """
+        [v1.5.3 최종] 한자 기반 정밀 연산 로직
+        me_hj_hanja: '木', '火' 등 한자 오행이 들어와야 함
+        """
+        if power <= 49:
+            eokbu_type = "인성/비겁"
+            targets = ['인성', '비겁']
+        else:
+            eokbu_type = "식상/재성/관성"
+            targets = ['식상', '재성', '관성']
+            
+        # 억부용신 오행 찾기 (한자로 검색)
+        hj_elements = ['木', '火', '土', '金', '水']
+        # 한자 결과를 한글로 변환하기 위한 매핑
+        hj_to_hg = {'木': '목', '火': '화', '土': '토', '金': '금', '水': '수'}
+        
+        found_elements = []
+        for target_hj in hj_elements:
+            # (나의한자오행, 대상한자오행)으로 REL_MAP 검색
+            rel = sc.REL_MAP.get((me_hj_hanja, target_hj))
+            
+            if rel and rel in targets:
+                found_elements.append(hj_to_hg[target_hj]) # 결과는 한글로 저장
+        
+        if not found_elements:
+            # 여기마저 실패하면 REL_MAP 구조 자체를 출력해봐야 합니다.
+            print(f"⚠️ 경고: 용신 추출 실패 (입력값: {me_hj_hanja}, 타입: {eokbu_type})")
+            found_elements = ["데이터 확인 필요"]
+        
+        # 2. 조후 용신 (기존 유지)
+        month_branch = palja[3]
+        johoo_yongsin = "필요 없음 (중화)"
+        if month_branch in ['亥', '子', '丑']: johoo_yongsin = "화(火) - 추운 계절이라 따뜻한 기운이 최우선입니다."
+        elif month_branch in ['巳', '午', '未']: johoo_yongsin = "수(水) - 더운 계절이라 시원한 기운이 최우선입니다."
+        elif month_branch in ['寅', '卯', '辰']: johoo_yongsin = "화(火) - 만물이 성장하도록 온기가 필요합니다."
+        elif month_branch in ['申', '酉', '戌']: johoo_yongsin = "수(水) - 건조한 계절이라 적절한 수기가 필요합니다."
+
+        return {
+            "eokbu_elements": "/".join(found_elements),
+            "eokbu_type": eokbu_type,
+            "johoo": johoo_yongsin
+        }
+
     def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
-        """메인 분석 오케스트레이터 v1.4 (8단계 신강약 판정 포함)"""
+        """메인 분석 오케스트레이터 v1.5 (억부/조후 용신 상세 분석 포함)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
@@ -164,7 +208,10 @@ class SajuEngine:
         yG, mG, dG = day_data['yG'], day_data['mG'], day_data['dG']
         yG, mG = self._apply_solar_correction(dt_raw, yG, mG)
         
-        me, me_hj = dG[0], sc.E_MAP_HJ[dG[0]]
+        # dG[0]는 '甲', '乙' 같은 일간 한자입니다.
+        me = dG[0] # '甲' 등
+        me_hj_hangeul = sc.ELEMENT_MAP.get(me) # '목'
+        me_hj_hanja = sc.E_MAP_HJ.get(me)      # '木'
         
         h_idx = ((dt_true_solar.hour * 60 + dt_true_solar.minute + 60) // 120) % 12
         target_dG_for_hour = dG
@@ -178,11 +225,14 @@ class SajuEngine:
         
         palja = [yG[0], yG[1], mG[0], mG[1], dG[0], dG[1], hG[0], hG[1]]
         
-        # [수정] 점수 계산 및 8단계 상태 판정
-        scores, power = self._calculate_power(palja, me_hj)
+        # [데이터 연산] 신강약 및 상세 용신 판별
+        scores, power = self._calculate_power(palja, me_hj_hanja)
         detailed_status = self._get_detailed_status(power)
         
-        pillars = self._investigate_sinsal(palja, me, me_hj)
+        # [신규 추가] 용신 정보 상세 추출
+        yongsin_info = self._get_yongsin_info(palja, power, me_hj_hanja)
+        
+        pillars = self._investigate_sinsal(palja, me, me_hj_hanja)
         l_term, n_term = self._get_solar_terms(dt_raw)
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
 
@@ -195,9 +245,6 @@ class SajuEngine:
             "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
         }
 
-        # [참고] 용신 방향성 미세 조정 로직 (중화인 경우 설명력 강화 가능)
-        yongsin = "인성/비겁" if power <= 49 else "식상/재성/관성"
-
         return {
             "birth": birth_str, 
             "gender": gender, 
@@ -206,8 +253,12 @@ class SajuEngine:
             "me_elem": sc.ELEMENT_MAP[me],
             "scores": scores, 
             "power": power, 
-            "status": detailed_status, # 8단계 세분화된 상태값
-            "yongsin": yongsin, 
+            "status": detailed_status,
+            "yongsin_detail": { # [v1.5 핵심] 가공된 용신 데이터
+                "eokbu_elements": yongsin_info['eokbu_elements'],
+                "eokbu_type": yongsin_info['eokbu_type'],
+                "johoo": yongsin_info['johoo']
+            },
             "daeun_num": daeun_num, 
             "daeun_list": daeun_list, 
             "current_trace": current_trace,
