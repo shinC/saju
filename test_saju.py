@@ -74,6 +74,10 @@ if __name__ == "__main__":
     # 1981년 3월 4일은 '경칩(절기)' 부근으로, v1.0의 절기 교정 로직을 테스트하기 최적의 날짜입니다.
     print("시스템: SajuEngine v1.0 분석을 시작합니다...")
     result = engine.analyze("1954-05-10 00:05", "M", location='서울')
+
+    # 1. 야자시 인정 (현대적 학설 - 0시 기준 일주 변경)
+    # use_yajas_i=True (기본값)
+    res_true = engine.analyze("1988-05-15 00:50", "F", use_yajas_i=False)
     
     # 3. 결과 출력
-    presenter.render(result)
+    presenter.render(res_true)
