@@ -67,13 +67,13 @@ class ExpertPresenter:
 if __name__ == "__main__":
     # 1. 엔진 및 프레젠터 초기화
     # 실제 파일 경로에 맞게 수정하세요.
-    engine = SajuEngine('manse_data.json', 'term_data.json')
+    engine = SajuEngine('manse_data_v2.json', 'term_data.json')
     presenter = ExpertPresenter(engine)
     
     # 2. 테스트 케이스 수행
     # 1981년 3월 4일은 '경칩(절기)' 부근으로, v1.0의 절기 교정 로직을 테스트하기 최적의 날짜입니다.
     print("시스템: SajuEngine v1.0 분석을 시작합니다...")
-    result = engine.analyze("1900-02-04 10:00", "M", location='서울')
+    result = engine.analyze("1910-08-29 00:20", "M", location='서울')
     
     # 3. 결과 출력
     presenter.render(result)

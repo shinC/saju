@@ -4,14 +4,47 @@ import saju_constants as sc
 
 class SajuEngine:
     """
-    v1.0: 절기 정밀 교정 버전 (Priority 1 해결)
-    - [수정] analyze: 절입 시각(분 단위) 비교를 통한 연주(yG) 및 월주(mG) 강제 교정 로직 추가
-    - [추가] _apply_solar_correction: transition day(절기 당일) 시각 비교 및 간지 시프트(Shift) 처리
+    v1.1: 역사적 표준시 및 서머타임 보정 버전 (Priority 2 해결)
+    - [추가] _get_historical_correction: 대한민국 표준시 변천사 및 서머타임 정밀 보정
+    - [수정] analyze: 보정된 표준시(Standard Reference)를 적용하여 시주 및 절기 비교 정밀화
     """
     def __init__(self, m_file, t_file):
         with open(m_file, 'r', encoding='utf-8') as f: self.m_db = json.load(f)
         with open(t_file, 'r', encoding='utf-8') as f: self.t_db = json.load(f)
         self.SIXTY_GANZI = [f"{sc.STEMS[i%10]}{sc.BRANCHES[i%12]}" for i in range(60)]
+
+    def _get_historical_correction(self, dt):
+        """
+        [Priority 2 해결] 역사적 표준시 및 서머타임 보정 로직
+        - 127.5도(UTC+8.5) 사용기: 현재 기준(UTC+9)보다 30분 느림 -> +30분 보정
+        - 서머타임 사용기: 현재 기준보다 1시간 빠름 -> -60분 보정
+        """
+        offset = 0
+        ts = dt.strftime("%Y%m%d%H%M")
+        
+        # 1. 대한민국 표준시 변천사 (127.5도 사용 기간: +30분)
+        # 1908.04.01 00:00 ~ 1911.12.31 23:59
+        if "190804010000" <= ts <= "191112312359":
+            offset += 30
+        # 1954.03.21 00:00 ~ 1961.08.09 23:59
+        elif "195403210000" <= ts <= "196108092359":
+            offset += 30
+            
+        # 2. 서머타임 실시 기간 (-60분)
+        # 주요 기간만 수록 (정밀 데이터 기반)
+        dst_periods = [
+            ("194806010000", "194809130000"), ("194904030000", "194909110000"),
+            ("195004010000", "195009100000"), ("195105060000", "195109090000"),
+            ("195505050000", "195509090000"), ("195605200000", "195609300000"),
+            ("195705050000", "195709220000"), ("195805040000", "195809210000"),
+            ("195905030000", "195909200000"), ("196005010000", "196009180000"),
+            ("198705100200", "198710110300"), ("198805080200", "198810090300")
+        ]
+        for start, end in dst_periods:
+            if start <= ts <= end:
+                offset -= 60
+                break
+        return offset
 
     def _get_solar_terms(self, dt_in):
         """[절기 연산] 로직 분리"""
@@ -28,31 +61,17 @@ class SajuEngine:
         return l_term, n_term
 
     def _apply_solar_correction(self, dt_in, yG, mG):
-        """
-        [Priority 1 해결] 절기 시각 정밀 교정
-        - manse_data.json(m_db)은 날짜 단위이므로, 절기 당일 오전/오후 오차를 잡기 위해 
-          태어난 시각과 실제 절입 시각(t_db)을 비교하여 간지를 보정합니다.
-        """
+        """[Priority 1 해결] 절기 시각 정밀 교정 (v1.0 유지)"""
         today_str = dt_in.strftime("%Y%m%d")
         year_str = str(dt_in.year)
-        
-        # 오늘 날짜에 해당하는 절기(월 변경 절기)가 있는지 확인
         term_today = next((t for t in self.t_db.get(year_str, []) 
                           if t['date'] == today_str and t['isMonthChange']), None)
-        
         if term_today:
             term_dt = datetime.strptime(term_today['datetime'], "%Y-%m-%dT%H:%M")
-            # 태어난 시각이 절기 시각보다 이전이라면, m_db의 '이미 바뀐 간지'를 이전으로 되돌림
             if dt_in < term_dt:
-                # 1. 월주(mG) 시프트 백
-                m_idx = self.SIXTY_GANZI.index(mG)
-                mG = self.SIXTY_GANZI[(m_idx - 1) % 60]
-                
-                # 2. 만약 해당 절기가 '입춘(1월)'이라면 연주(yG)도 이전 해로 시프트 백
+                mG = self.SIXTY_GANZI[(self.SIXTY_GANZI.index(mG) - 1) % 60]
                 if term_today['monthIndex'] == 1:
-                    y_idx = self.SIXTY_GANZI.index(yG)
-                    yG = self.SIXTY_GANZI[(y_idx - 1) % 60]
-        
+                    yG = self.SIXTY_GANZI[(self.SIXTY_GANZI.index(yG) - 1) % 60]
         return yG, mG
 
     def _calculate_power(self, palja, me_hj):
@@ -108,56 +127,69 @@ class SajuEngine:
         return daeun_num, daeun_list
 
     def analyze(self, birth_str, gender, location='서울'):
-        """메인 분석 오케스트레이터 - 정밀 절기 교정 버전"""
-        dt_in = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
-        # 시주(時柱) 계산을 위한 표준시/경도 보정 시각
-        dt_std = dt_in + timedelta(minutes=(sc.CITY_DATA.get(location, 126.97) - 135) * 4)
+        """메인 분석 오케스트레이터 - 시차 및 서머타임 보정 버전"""
+        dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         
-        # 0. 절기 데이터 확보
-        l_term, n_term = self._get_solar_terms(dt_in)
+        # [Priority 2 해결] 표준시 변천사 + 서머타임 통합 보정값 계산
+        hist_offset = self._get_historical_correction(dt_raw)
         
-        # m_db에서 기본 날짜 데이터 로드
-        day_key = dt_in.strftime("%Y%m%d")
-        if day_key not in self.m_db: return {"error": "Data not found"}
-        day_data = self.m_db[day_key]
+        # 엔진의 내부 기준(UTC+9, 135도)과 입력 시각의 시차를 보정한 '기준 시각' 산출
+        dt_ref = dt_raw + timedelta(minutes=hist_offset)
+        
+        day_key = dt_ref.strftime("%Y%m%d")
+        
+        # [추가] 디버깅 로그: 실제로 JSON에서 찾는 키가 무엇인지 확인
+        print(f"디버깅 - 입력시각: {birth_str}")
+        print(f"디버깅 - 보정시각: {dt_ref}")
+        print(f"디버깅 - 찾을 날짜(Key): {day_key}")
+        
+        day_data = self.m_db.get(day_key)
+        print(f"디버깅 - 가져온 데이터: {day_data}")
+
+        # 경도 시차 보정 (평균 태양시 산출)
+        lng_offset = (sc.CITY_DATA.get(location, 126.97) - 135) * 4
+        dt_std = dt_ref + timedelta(minutes=lng_offset)
+        
+        # 0. 절기 데이터 확보 (보정 전 시각 기준으로 절기 시각과 비교)
+        l_term, n_term = self._get_solar_terms(dt_raw)
+        
+        # m_db에서 기준 시각(dt_ref)에 해당하는 날짜의 간지 로드
+        day_key = dt_ref.strftime("%Y%m%d")
+        day_data = self.m_db.get(day_key)
+        if not day_data: return {"error": f"Data not found for {day_key}"}
         
         yG, mG, dG = day_data['yG'], day_data['mG'], day_data['dG']
         
-        # [Priority 1 해결] 절기 당일 시각 비교를 통한 연주/월주 강제 교정
-        yG, mG = self._apply_solar_correction(dt_in, yG, mG)
+        # [Priority 1] 절기 당일 시각 비교를 통한 연주/월주 강제 교정 (보정 전 시각 기준)
+        yG, mG = self._apply_solar_correction(dt_raw, yG, mG)
         
-        # 나를 나타내는 일간(me) 확정
         me, me_hj = dG[0], sc.E_MAP_HJ[dG[0]]
         
-        # 시주(hG) 계산 (dt_std 기준)
+        # 시주(hG) 계산 (모든 보정이 끝난 dt_std 기준)
         h_idx = ((dt_std.hour * 60 + dt_std.minute + 60) // 120) % 12
         hG_gan = sc.STEMS[({ '甲':0,'己':0,'乙':2,'庚':2,'丙':4,'辛':4,'丁':6,'壬':6,'戊':8,'癸':8 }[dG[0]] + h_idx) % 10]
         hG = hG_gan + sc.BRANCHES[h_idx]
         
         palja = [yG[0], yG[1], mG[0], mG[1], dG[0], dG[1], hG[0], hG[1]]
 
-        # 1. 신강약/오행 점수
+        # 1. 신강약/오행 점수 / 2. 신살 조사 / 3. 대운 계산
         scores, power = self._calculate_power(palja, me_hj)
-        # 2. 신살 조사
         pillars = self._investigate_sinsal(palja, me, me_hj)
-        # 3. 대운 계산
-        daeun_num, daeun_list = self._calculate_daeun(dt_in, yG, mG, gender, l_term, n_term)
+        daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
 
-        # 실시간 현재 운세
+        # 실시간 현재 운세 및 리턴 데이터 (생략된 부분 v1.0과 동일)
         now = datetime.now()
-        current_age = now.year - dt_in.year + 1
-        curr_daeun = next((d for d in daeun_list if d['start_age'] <= current_age < d['start_age'] + 10), daeun_list[0])
-        today_info = self.m_db.get(now.strftime("%Y%m%d"), {"yG": "N/A", "mG": "N/A", "dG": "N/A"})
-        
         current_trace = {
-            "date": now.strftime("%Y-%m-%d"), "age": current_age, "daeun": curr_daeun,
-            "seun": today_info['yG'], "wolun": today_info['mG'], "ilun": today_info['dG']
+            "date": now.strftime("%Y-%m-%d"), "age": now.year - dt_raw.year + 1,
+            "daeun": next((d for d in daeun_list if d['start_age'] <= (now.year - dt_raw.year + 1) < d['start_age'] + 10), daeun_list[0]),
+            "seun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('yG', 'N/A'),
+            "wolun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('mG', 'N/A'),
+            "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
         }
 
         return {
             "birth": birth_str, "gender": gender, "pillars": pillars, "me": me, "me_elem": sc.ELEMENT_MAP[me],
             "scores": scores, "power": power, "status": "신강" if power > 45 else "신약",
             "yongsin": "인성/비겁" if power <= 45 else "식상/재성/관성", 
-            "daeun_num": daeun_num, "daeun_list": daeun_list,
-            "current_trace": current_trace
+            "daeun_num": daeun_num, "daeun_list": daeun_list, "current_trace": current_trace
         }
