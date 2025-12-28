@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # 2. 테스트 케이스 수행
     # 1981년 3월 4일은 '경칩(절기)' 부근으로, v1.0의 절기 교정 로직을 테스트하기 최적의 날짜입니다.
     print("시스템: SajuEngine v1.0 분석을 시작합니다...")
-    result = engine.analyze("1910-08-29 00:20", "M", location='서울')
+    result = engine.analyze("1954-05-10 00:05", "M", location='서울')
     
     # 3. 결과 출력
     presenter.render(result)
