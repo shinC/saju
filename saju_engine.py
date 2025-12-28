@@ -128,11 +128,22 @@ class SajuEngine:
             daeun_list.append({"start_age": daeun_num + (i-1)*10, "ganzi": self.SIXTY_GANZI[curr_idx]})
         return daeun_num, daeun_list
 
+    def _get_detailed_status(self, power):
+        """
+        [Priority 5 추가] 신강약 8단계 세분화 로직
+        - power 점수(0~100)를 기반으로 명리학적 상태 반환
+        """
+        if power <= 15: return "극약(極弱)"
+        elif power <= 30: return "태약(太弱)"
+        elif power <= 43: return "신약(身弱)"
+        elif power <= 49: return "중화신약(中和身弱)"
+        elif power <= 56: return "중화신강(中和身强)"
+        elif power <= 70: return "신강(身强)"
+        elif power <= 85: return "태강(太强)"
+        else: return "극왕(極旺)"
+
     def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
-        """
-        메인 분석 오케스트레이터 v1.3 
-        - [추가] use_yajas_i: True(0시 기준 일주 변경), False(23시 기준 일주 변경)
-        """
+        """메인 분석 오케스트레이터 v1.4 (8단계 신강약 판정 포함)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
@@ -140,13 +151,11 @@ class SajuEngine:
         lng_offset = (sc.CITY_DATA.get(location, 126.97) - 135) * 4
         dt_true_solar = dt_ref + timedelta(minutes=lng_offset + eot_offset)
         
-        # [Priority 4] 자시 타입 및 일주 결정용 시각 보정
         jasi_type = self._get_jasi_type(dt_true_solar)
         
-        # 학설에 따른 날짜 결정 (야자시 미인정 시 23:00~00:00은 내일 날짜로 조회)
         fetch_dt = dt_true_solar
         if not use_yajas_i and jasi_type == "YAJAS-I":
-            fetch_dt = dt_true_solar + timedelta(hours=2) # 안전하게 내일로 이동
+            fetch_dt = dt_true_solar + timedelta(hours=2)
             
         day_key = fetch_dt.strftime("%Y%m%d")
         day_data = self.m_db.get(day_key)
@@ -157,10 +166,7 @@ class SajuEngine:
         
         me, me_hj = dG[0], sc.E_MAP_HJ[dG[0]]
         
-        # [Priority 4] 시주(hG) 계산 보정
-        # 야자시 학설(True)인 경우: 일주는 '오늘'이지만, 시주 천간은 '내일' 일간 기준으로 계산
         h_idx = ((dt_true_solar.hour * 60 + dt_true_solar.minute + 60) // 120) % 12
-        
         target_dG_for_hour = dG
         if use_yajas_i and jasi_type == "YAJAS-I":
             next_day_key = (dt_true_solar + timedelta(hours=2)).strftime("%Y%m%d")
@@ -172,8 +178,10 @@ class SajuEngine:
         
         palja = [yG[0], yG[1], mG[0], mG[1], dG[0], dG[1], hG[0], hG[1]]
         
-        # 연산 결과 조립
+        # [수정] 점수 계산 및 8단계 상태 판정
         scores, power = self._calculate_power(palja, me_hj)
+        detailed_status = self._get_detailed_status(power)
+        
         pillars = self._investigate_sinsal(palja, me, me_hj)
         l_term, n_term = self._get_solar_terms(dt_raw)
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
@@ -187,10 +195,21 @@ class SajuEngine:
             "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
         }
 
+        # [참고] 용신 방향성 미세 조정 로직 (중화인 경우 설명력 강화 가능)
+        yongsin = "인성/비겁" if power <= 49 else "식상/재성/관성"
+
         return {
-            "birth": birth_str, "gender": gender, "pillars": pillars, "me": me, "me_elem": sc.ELEMENT_MAP[me],
-            "scores": scores, "power": power, "status": "신강" if power > 45 else "신약",
-            "yongsin": "인성/비겁" if power <= 45 else "식상/재성/관성", 
-            "daeun_num": daeun_num, "daeun_list": daeun_list, "current_trace": current_trace,
-            "jasi_type": jasi_type # 분석용 정보 포함
+            "birth": birth_str, 
+            "gender": gender, 
+            "pillars": pillars, 
+            "me": me, 
+            "me_elem": sc.ELEMENT_MAP[me],
+            "scores": scores, 
+            "power": power, 
+            "status": detailed_status, # 8단계 세분화된 상태값
+            "yongsin": yongsin, 
+            "daeun_num": daeun_num, 
+            "daeun_list": daeun_list, 
+            "current_trace": current_trace,
+            "jasi_type": jasi_type
         }
