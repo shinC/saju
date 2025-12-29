@@ -200,25 +200,19 @@ class SajuEngine:
             eokbu_type = "식상/재성/관성"
             targets = ['식상', '재성', '관성']
             
-        # 억부용신 오행 찾기 (한자로 검색)
         hj_elements = ['木', '火', '土', '金', '水']
-        # 한자 결과를 한글로 변환하기 위한 매핑
         hj_to_hg = {'木': '목', '火': '화', '土': '토', '金': '금', '水': '수'}
         
         found_elements = []
         for target_hj in hj_elements:
-            # (나의한자오행, 대상한자오행)으로 REL_MAP 검색
             rel = sc.REL_MAP.get((me_hj_hanja, target_hj))
-            
             if rel and rel in targets:
-                found_elements.append(hj_to_hg[target_hj]) # 결과는 한글로 저장
+                found_elements.append(hj_to_hg[target_hj])
         
         if not found_elements:
-            # 여기마저 실패하면 REL_MAP 구조 자체를 출력해봐야 합니다.
             print(f"⚠️ 경고: 용신 추출 실패 (입력값: {me_hj_hanja}, 타입: {eokbu_type})")
             found_elements = ["데이터 확인 필요"]
         
-        # 2. 조후 용신 (기존 유지)
         month_branch = palja[3]
         johoo_yongsin = "필요 없음 (중화)"
         if month_branch in ['亥', '子', '丑']: johoo_yongsin = "화(火) - 추운 계절이라 따뜻한 기운이 최우선입니다."
@@ -232,8 +226,42 @@ class SajuEngine:
             "johoo": johoo_yongsin
         }
 
+    def _calculate_daeun_scores(self, daeun_list, yongsin_info):
+        """
+        [신규 메소드] 대운별 인생 점수 자동 계산기
+        - 억부 용신 및 희신을 기반으로 0~100점 산출
+        """
+        yong_elements = yongsin_info['eokbu_elements'].split('/')
+        
+        # 희신(Yongsin을 돕는 오행) 도출 (상생 관계)
+        sangsaeng = {'목':'화', '화':'토', '토':'금', '금':'수', '수':'목'}
+        huising = [sangsaeng.get(y) for y in yong_elements if y in sangsaeng]
+        
+        # 기신(나쁜 오행 - 상극 관계)
+        sanggeuk = {'목':'토', '토':'수', '수':'화', '화':'금', '금':'목'}
+        gising = [sanggeuk.get(y) for y in yong_elements if y in sanggeuk]
+
+        for d in daeun_list:
+            gan_hj = sc.ELEMENT_MAP.get(d['ganzi'][0])
+            ji_hj = sc.ELEMENT_MAP.get(d['ganzi'][1])
+            
+            score = 50 # 기본 점수
+            
+            # 천간 점수 (가중치 30%)
+            if gan_hj in yong_elements: score += 15
+            elif gan_hj in huising: score += 7
+            elif gan_hj in gising: score -= 10
+            
+            # 지지 점수 (가중치 70%)
+            if ji_hj in yong_elements: score += 35
+            elif ji_hj in huising: score += 18
+            elif ji_hj in gising: score -= 20
+            
+            d['score'] = max(0, min(100, int(score)))
+        return daeun_list
+
     def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
-        """메인 분석 오케스트레이터 v1.5 (억부/조후 용신 상세 분석 포함)"""
+        """메인 분석 오케스트레이터 v1.6 (대운 점수 계산 포함)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
@@ -254,10 +282,8 @@ class SajuEngine:
         yG, mG, dG = day_data['yG'], day_data['mG'], day_data['dG']
         yG, mG = self._apply_solar_correction(dt_raw, yG, mG)
         
-        # dG[0]는 '甲', '乙' 같은 일간 한자입니다.
-        me = dG[0] # '甲' 등
-        me_hj_hangeul = sc.ELEMENT_MAP.get(me) # '목'
-        me_hj_hanja = sc.E_MAP_HJ.get(me)      # '木'
+        me = dG[0]
+        me_hj_hanja = sc.E_MAP_HJ.get(me)
         
         h_idx = ((dt_true_solar.hour * 60 + dt_true_solar.minute + 60) // 120) % 12
         target_dG_for_hour = dG
@@ -271,16 +297,16 @@ class SajuEngine:
         
         palja = [yG[0], yG[1], mG[0], mG[1], dG[0], dG[1], hG[0], hG[1]]
         
-        # [데이터 연산] 신강약 및 상세 용신 판별
         scores, power = self._calculate_power(palja, me_hj_hanja)
         detailed_status = self._get_detailed_status(power)
-        
-        # [신규 추가] 용신 정보 상세 추출
         yongsin_info = self._get_yongsin_info(palja, power, me_hj_hanja)
         
         pillars = self._investigate_sinsal(palja, me, me_hj_hanja)
         l_term, n_term = self._get_solar_terms(dt_raw)
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
+
+        # [신규] 대운별 인생 점수 계산기 호출
+        daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info)
 
         now = datetime.now()
         current_trace = {
@@ -300,13 +326,13 @@ class SajuEngine:
             "scores": scores, 
             "power": power, 
             "status": detailed_status,
-            "yongsin_detail": { # [v1.5 핵심] 가공된 용신 데이터
+            "yongsin_detail": {
                 "eokbu_elements": yongsin_info['eokbu_elements'],
                 "eokbu_type": yongsin_info['eokbu_type'],
                 "johoo": yongsin_info['johoo']
             },
             "daeun_num": daeun_num, 
-            "daeun_list": daeun_list, 
+            "daeun_list": daeun_list, # 점수가 포함된 리스트 반환
             "current_trace": current_trace,
             "jasi_type": jasi_type
         }

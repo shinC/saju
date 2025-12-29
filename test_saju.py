@@ -18,11 +18,12 @@ class ExpertPresenter:
     def render(self, data):
         tr = data['current_trace']
         p = data['pillars']
-        yd = data['yongsin_detail'] # v1.5의 상세 용신 데이터 참조
+        yd = data['yongsin_detail']
+        dl = data['daeun_list'] # 대운 리스트 참조
         
-        # [PART 1] 정밀 만세력 데이터 테이블
+        # [PART 1] 정밀 만세력 데이터 테이블 (기존 동일)
         print(f"\n사용자 정보: [생년월일: {data['birth']}] [성별: {'남' if data['gender']=='M' else '여'}]")
-        print(f"▶ 현재 운세 ({tr['date']}): {tr['age']}세 / {tr['daeun']['start_age']}세 대운 [{tr['daeun']['ganzi']}]")
+        print(f"▶ 현재 운세 ({tr['date']}): {tr['age']}세 / {tr['daeun']['start_age']}세 대운 [{tr['daeun']['ganzi']}] (점수: {tr['daeun'].get('score', '-')})")
         print(f"▶ 오늘의 간지: [연운:{tr['seun']}] [월운:{tr['wolun']}] [일진:{tr['ilun']}]")
         print("="*145)
         print(f"구분    | 천간(십성)          | 지지(십성/12신살)               | 심층 길성 및 신살")
@@ -41,21 +42,18 @@ class ExpertPresenter:
             print(f"{labels[i]:<5} | {t_gan:<20} | {t_ji:<30} | {spec}")
         print("-" * 145)
 
-        # 요약 정보 섹션 (수정된 핵심 로직)
+        # 요약 정보 섹션
         print(f"▶ 오행 분석 (점수): {data['scores']}")
         me_h = f"{data['me']}({self.h[data['me']]})"
         yongsin_display = f"{yd['eokbu_elements']} ({yd['eokbu_type']})"
-        # 신강약 및 용신 상세 정보 구성
-        print(f"▶ 나의 본질: {me_h} {data['me_elem']} | 신강약 지수: {data['power']}점")
-        print(f"▶ 현재 상태: **{data['status']}**")
-        print(f"▶ 억부 용신: {yongsin_display}")
-        print(f"▶ 조후 용신: {yd['johoo']}")
-        print(f"▶ 대운수: {data['daeun_num']}")
+        print(f"▶ 나의 본질: {me_h} {data['me_elem']} | 신강약 지수: {data['power']}점 | 상태: **{data['status']}**")
+        print(f"▶ 억부 용신: {yongsin_display} | 조후 용신: {yd['johoo']}")
         
-        daeun_path_str = " -> ".join([f"[{d['start_age']}세 {d['ganzi']}]" for d in data['daeun_list']])
+        # [수정] 대운 경로에 점수 포함
+        daeun_path_str = " -> ".join([f"[{d['start_age']}세 {d['ganzi']}({d.get('score', 0)}점)]" for d in dl])
         print(f"▶ 100세 대운 경로: {daeun_path_str}")
 
-        # [PART 2] 심층 신살 분석
+        # [PART 2] 심층 신살 분석 (기존 동일)
         print(f"\n✨ 전문가의 신살 심층 해석")
         print("="*85)
         unique_specials = sorted(list(set(all_specials)))
@@ -63,14 +61,31 @@ class ExpertPresenter:
             print(f" ● {s:<10}: {self.sinsal_desc.get(s, '삶에 독특한 에너지를 부여합니다.')}")
         print("="*85)
 
-        # [PART 3] 프리미엄 스토리텔링 리포트 (데이터 매핑 수정)
+        # [신규 PART 4] 인생 운세 리듬 (대운 점수 시각화)
+        print(f"\n📈 인생 운세 리듬 (대운별 점수 분석)")
+        print("="*85)
+        for d in dl:
+            score = d.get('score', 0)
+            # 점수를 시각적인 바로 표현 (5점당 별 하나)
+            bar = "★" * (score // 10) + "☆" * (10 - (score // 10))
+            # 현재 대운 표시
+            current_tag = " <--- [현재 대운]" if d['start_age'] <= tr['age'] < d['start_age'] + 10 else ""
+            print(f" {d['start_age']:>2}세 ~ | {d['ganzi']}운 : {score:>3}점 | {bar}{current_tag}")
+        print("="*85)
+
+        # [PART 3] 프리미엄 스토리텔링 리포트
         print(f"\n" + "═"*110 + "\n   반갑습니다. 20년 경력의 명리학 전문가가 귀하의 전 생애 운명을 정밀 분석해 드립니다.\n" + "═"*110)
         print(f"🔮 1. 타고난 본질: 귀하는 {me_h} 일간으로 해당 오행의 특성을 깊게 간직하고 있습니다.")
-        print(f"   분석 결과 귀하는 **'{data['status']}'**한 에너지를 가지고 있습니다.")
-        print(f"   억부상 **'{yd['eokbu_elements']}'** 기운이 들어올 때 기운이 중화되어 큰 발복을 기대할 수 있으며,")
-        print(f"   계절적 기운(조후)을 고려할 때 **{yd['johoo']}**")
+        print(f"   분석 결과 귀하는 **'{data['status']}'**한 에너지를 가지고 있으며, **'{yd['eokbu_elements']}'** 기운이 올 때 발복합니다.")
         
-        # 월운 한글 명칭 동적 생성
+        # 현재 대운 점수에 따른 코멘트 추가
+        curr_score = tr['daeun'].get('score', 0)
+        advice = "준비하며 때를 기다려야 하는 시기입니다."
+        if curr_score >= 80: advice = "인생의 황금기입니다. 적극적으로 도전하세요!"
+        elif curr_score >= 60: advice = "순탄한 흐름입니다. 내실을 다지기 좋습니다."
+        
+        print(f"🔮 2. 대운 분석: 현재 대운 점수는 **{curr_score}점**으로, {advice}")
+        
         wolun_h = f"{tr['wolun']}({self.h[tr['wolun'][0]]}{self.h[tr['wolun'][1]]})"
         print(f"\n📅 4. 실시간 분석: 현재 {tr['age']}세, {wolun_h}월을 지나고 있으며 기운의 흐름이 변화하는 시기입니다.\n" + "═"*110 + "\n")
 if __name__ == "__main__":
