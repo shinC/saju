@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     # 1. 야자시 인정 (현대적 학설 - 0시 기준 일주 변경)
     # use_yajas_i=True (기본값)
-    res_true = engine.analyze("1988-05-15 00:50", "F", use_yajas_i=False)
+    res_true = engine.analyze("1981-03-04 14:01", "M", use_yajas_i=False)
     
     # 3. 결과 출력
     presenter.render(res_true)

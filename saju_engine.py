@@ -91,15 +91,52 @@ class SajuEngine:
         return scores, power
 
     def _investigate_sinsal(self, palja, me, me_hj):
-        """[신살 전수 조사] (유지)"""
-        sinsal_start_idx = sc.BRANCHES.find(sc.SAMHAP_START_MAP[palja[1]])
+        """[Priority 6] 신살/길성 전수 조사 확장 버전"""
+        # 1. 12신살 기준점 (년지 기준 & 일지 기준)
+        year_ji = palja[1]
+        day_ji = palja[5]
+        
+        # 삼합 시작 글자 찾기 (년지 기준/일지 기준)
+        start_idx_year = sc.BRANCHES.find(sc.SAMHAP_START_MAP[year_ji])
+        start_idx_day = sc.BRANCHES.find(sc.SAMHAP_START_MAP[day_ji])
+
+        # 2. 공망(空亡) 계산 (일주 기준)
+        # 일주가 60갑자 중 몇 번째인지 찾아 공망 지지 2개를 가져옴
+        ilju_name = palja[4] + palja[5]
+        ilju_idx = self.SIXTY_GANZI.index(ilju_name)
+        gongmang_jis = sc.GONGMANG_MAP[ilju_idx // 10] # 갑자순~갑인순 매핑
+
         pillars = []
         for i in range(4):
             g, j = palja[i*2], palja[i*2+1]
-            offset = (sc.BRANCHES.find(j) - sinsal_start_idx) % 12
-            s_12 = sc.SINSAL_12_NAMES[offset]
             special = []
-            if s_12 in ["화개살", "도화살", "역마살"]: special.append(s_12)
+
+            # --- [A] 12신살 (년지 vs 일지 통합) ---
+            off_y = (sc.BRANCHES.find(j) - start_idx_year) % 12
+            off_d = (sc.BRANCHES.find(j) - start_idx_day) % 12
+            s12_y = sc.SINSAL_12_NAMES[off_y]
+            s12_d = sc.SINSAL_12_NAMES[off_d]
+            
+            # 년지 기준 신살은 기본 포함
+            special.append(s12_y)
+            # 일지 기준 신살이 다를 경우 추가 (예: 도화살(일))
+            if s12_d != s12_y:
+                special.append(f"{s12_d}(일)")
+
+            # --- [B] 공망(空亡) 체크 ---
+            if j in gongmang_jis:
+                special.append("공망(空亡)")
+
+            # --- [C] 특수 강성 신살 (괴강, 양인, 백호) ---
+            if (g+j) in ["戊戌", "庚戌", "庚辰", "壬辰", "壬戌"]:
+                special.append("괴강살")
+            
+            # 양인살 (일간 기준 강한 칼날)
+            yangin_map = {"甲":"卯", "丙":"午", "戊":"午", "庚":"酉", "壬":"子"}
+            if j == yangin_map.get(me):
+                special.append("양인살")
+
+            # --- [D] 기존 길성 및 귀인 ---
             if g in sc.HYEONCHIM_CHARS or j in sc.HYEONCHIM_CHARS: special.append("현침살")
             if (g+j) in sc.BAEKHO_LIST: special.append("백호대살")
             if j in sc.TAEGEUK_MAP.get(me, []): special.append("태극귀인")
@@ -107,11 +144,20 @@ class SajuEngine:
             if j == sc.HONGYEOM_MAP.get(me): special.append("홍염살")
             if j == sc.JEONGROK_MAP.get(me): special.append("정록(록신)")
             if j in sc.CHEONEUL_MAP.get(me, []): special.append("천을귀인")
+            
+            # 귀문관살 (예민함, 천재성)
+            gwimun_map = {"子":"未", "丑":"午", "寅":"未", "卯":"申", "辰":"亥", "巳":"戌", "午":"丑", "未":"寅", "申":"卯", "酉":"寅", "戌":"巳", "亥":"辰"}
+            if j == gwimun_map.get(palja[5]): # 일지와 대조
+                special.append("귀문관살")
+
+            # --- [E] 십성(Ten Gods) 계산 ---
             t_gan = "본인" if i==2 else sc.TEN_GODS_MAP.get((sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[g])), sc.POLARITY_MAP[me]==sc.POLARITY_MAP[g]), "-")
             t_ji = sc.TEN_GODS_MAP.get((sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[j])), sc.POLARITY_MAP[me]==sc.POLARITY_MAP[j]), "-")
+            
             pillars.append({
                 "gan": g, "ji": j, "t_gan": t_gan, "t_ji": t_ji, 
-                "sinsal_12": s_12, "special": sorted(list(set(special)))
+                "sinsal_12": s12_y, 
+                "special": sorted(list(set(special)))
             })
         return pillars
 
