@@ -226,42 +226,67 @@ class SajuEngine:
             "johoo": johoo_yongsin
         }
 
-    def _calculate_daeun_scores(self, daeun_list, yongsin_info):
+    def _calculate_daeun_scores(self, daeun_list, yongsin_info, palja):
         """
-        [신규 메소드] 대운별 인생 점수 자동 계산기
-        - 억부 용신 및 희신을 기반으로 0~100점 산출
+        [v1.9] 상용화 최종 버전: 지지 용신 보호막(Ji-Yongsin Shield) 적용
+        - 포스텔러/점신 스타일의 '긍정 편향' 보정 로직
+        - 지지가 용신이면 천간/지지의 충돌 감점을 80% 무력화
         """
         yong_elements = yongsin_info['eokbu_elements'].split('/')
-        
-        # 희신(Yongsin을 돕는 오행) 도출 (상생 관계)
         sangsaeng = {'목':'화', '화':'토', '토':'금', '금':'수', '수':'목'}
         huising = [sangsaeng.get(y) for y in yong_elements if y in sangsaeng]
         
-        # 기신(나쁜 오행 - 상극 관계)
-        sanggeuk = {'목':'토', '토':'수', '수':'화', '화':'금', '금':'목'}
-        gising = [sanggeuk.get(y) for y in yong_elements if y in sanggeuk]
+        # 합/충 정의 (기존 유지)
+        stem_hab = {'甲':'己', '己':'甲', '乙':'庚', '庚':'乙', '丙':'辛', '辛':'丙', '丁':'壬', '壬':'丁', '戊':'癸', '癸':'戊'}
+        stem_chung = {'甲':'庚', '庚':'甲', '乙':'辛', '辛':'乙', '丙':'壬', '壬':'丙', '丁':'癸', '癸':'丁'}
+        branch_hab = {'子':'丑', '丑':'子', '寅':'亥', '亥':'寅', '卯':'戌', '戌':'卯', '辰':'酉', '酉':'辰', '巳':'申', '申':'巳', '午':'未', '未':'午'}
+        branch_chung = {'子':'午', '午':'子', '丑':'未', '未':'丑', '寅':'申', '申':'寅', '卯':'酉', '酉':'卯', '辰':'戌', '戌':'辰', '巳':'亥', '亥':'巳'}
+
+        natal_stems = [palja[0], palja[2], palja[4], palja[6]]
+        natal_branches = [palja[1], palja[3], palja[5], palja[7]]
 
         for d in daeun_list:
-            gan_hj = sc.ELEMENT_MAP.get(d['ganzi'][0])
-            ji_hj = sc.ELEMENT_MAP.get(d['ganzi'][1])
+            d_gan, d_ji = d['ganzi'][0], d['ganzi'][1]
+            gan_hj, ji_hj = sc.ELEMENT_MAP.get(d_gan), sc.ELEMENT_MAP.get(d_ji)
             
-            score = 50 # 기본 점수
-            
-            # 천간 점수 (가중치 30%)
+            # 1. 기본 점수 산출
+            score = 50 
             if gan_hj in yong_elements: score += 15
             elif gan_hj in huising: score += 7
-            elif gan_hj in gising: score -= 10
+            elif gan_hj in ['목', '화', '토', '금', '수']: score -= 10 # 기신 기본 감점
             
-            # 지지 점수 (가중치 70%)
             if ji_hj in yong_elements: score += 35
             elif ji_hj in huising: score += 18
-            elif ji_hj in gising: score -= 20
+            else: score -= 20 # 기신 기본 감점
             
-            d['score'] = max(0, min(100, int(score)))
+            # 2. [상용화 핵심] 지지 용신 보호막 체크
+            is_ji_good = (ji_hj in yong_elements or ji_hj in huising)
+            interaction_offset = 0
+            
+            # 천간 보정 루프
+            for n_gan in natal_stems:
+                if stem_hab.get(d_gan) == n_gan: interaction_offset += 5
+                if stem_chung.get(d_gan) == n_gan:
+                    penalty = 7
+                    # 지지가 좋으면 천간 충돌은 '정신적 자극'일 뿐, 점수는 깎지 않음 (80% 감쇄)
+                    if is_ji_good: penalty = 1 
+                    interaction_offset -= penalty
+                
+            # 지지 보정 루프
+            for n_ji in natal_branches:
+                if branch_hab.get(d_ji) == n_ji: interaction_offset += 8
+                if branch_chung.get(d_ji) == n_ji:
+                    penalty = 12
+                    # 지지가 용신인데 충이 나면 '새로운 터전으로의 확장'으로 해석 (75% 감쇄)
+                    if is_ji_good: penalty = 3
+                    interaction_offset -= penalty
+            
+            d['score'] = max(0, min(100, int(score + interaction_offset)))
+            
         return daeun_list
 
     def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
-        """메인 분석 오케스트레이터 v1.6 (대운 점수 계산 포함)"""
+        """메인 분석 오케스트레이터 v1.7 (합/충 보정 포함)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
@@ -305,8 +330,8 @@ class SajuEngine:
         l_term, n_term = self._get_solar_terms(dt_raw)
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
 
-        # [신규] 대운별 인생 점수 계산기 호출
-        daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info)
+        # [v1.7] palja 인자를 추가로 전달하여 합/충 보정 수행
+        daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info, palja)
 
         now = datetime.now()
         current_trace = {
@@ -321,6 +346,7 @@ class SajuEngine:
             "birth": birth_str, 
             "gender": gender, 
             "pillars": pillars, 
+            "ilju": pillars[2]['gan'] + pillars[2]['ji'], # 일주 키 추가
             "me": me, 
             "me_elem": sc.ELEMENT_MAP[me],
             "scores": scores, 
@@ -332,7 +358,7 @@ class SajuEngine:
                 "johoo": yongsin_info['johoo']
             },
             "daeun_num": daeun_num, 
-            "daeun_list": daeun_list, # 점수가 포함된 리스트 반환
+            "daeun_list": daeun_list,
             "current_trace": current_trace,
             "jasi_type": jasi_type
         }

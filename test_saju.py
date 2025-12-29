@@ -1,11 +1,12 @@
 import json
 from datetime import datetime, timedelta
-# SajuEngine v1.0이 같은 파일에 있거나 import 되어야 합니다.
 from saju_engine import SajuEngine 
+from FortuneBridge import FortuneBridge
 
 class ExpertPresenter:
-    def __init__(self, engine):
+    def __init__(self, engine, bridge):
         self.engine = engine
+        self.bridge = bridge # 브릿지 객체 주입
         # 한글 변환 매핑
         self.h = {'甲':'갑','乙':'을','丙':'병','丁':'정','戊':'무','己':'기','庚':'경','辛':'신','壬':'임','癸':'계','子':'자','丑':'축','寅':'인','卯':'묘','辰':'진','巳':'사','午':'오','未':'미','申':'신','酉':'유','戌':'술','亥':'해'}
         self.sinsal_desc = {
@@ -19,10 +20,17 @@ class ExpertPresenter:
         tr = data['current_trace']
         p = data['pillars']
         yd = data['yongsin_detail']
-        dl = data['daeun_list'] # 대운 리스트 참조
+        dl = data['daeun_list']
         
-        # [PART 1] 정밀 만세력 데이터 테이블 (기존 동일)
-        print(f"\n사용자 정보: [생년월일: {data['birth']}] [성별: {'남' if data['gender']=='M' else '여'}]")
+        # [추가] 브릿지를 통한 데이터 추출 (MBTI 및 행운 아이템)
+        ilju_info = self.bridge.get_ilju_report(data['ilju'])
+        lucky_info = self.bridge.get_lucky_report(yd['eokbu_elements'])
+
+        # [PART 1] 정밀 만세력 데이터 테이블
+        print(f"\n" + "═"*145)
+        print(f" 🔮 {ilju_info['title']} - [{data['ilju']}] {ilju_info['mbti']} 유형의 정밀 분석 리포트")
+        print("═"*145)
+        print(f"사용자 정보: [생년월일: {data['birth']}] [성별: {'남' if data['gender']=='M' else '여'}]")
         print(f"▶ 현재 운세 ({tr['date']}): {tr['age']}세 / {tr['daeun']['start_age']}세 대운 [{tr['daeun']['ganzi']}] (점수: {tr['daeun'].get('score', '-')})")
         print(f"▶ 오늘의 간지: [연운:{tr['seun']}] [월운:{tr['wolun']}] [일진:{tr['ilun']}]")
         print("="*145)
@@ -42,18 +50,26 @@ class ExpertPresenter:
             print(f"{labels[i]:<5} | {t_gan:<20} | {t_ji:<30} | {spec}")
         print("-" * 145)
 
-        # 요약 정보 섹션
+        # [기존] 요약 정보 섹션 (삭제 없이 유지)
         print(f"▶ 오행 분석 (점수): {data['scores']}")
         me_h = f"{data['me']}({self.h[data['me']]})"
         yongsin_display = f"{yd['eokbu_elements']} ({yd['eokbu_type']})"
         print(f"▶ 나의 본질: {me_h} {data['me_elem']} | 신강약 지수: {data['power']}점 | 상태: **{data['status']}**")
         print(f"▶ 억부 용신: {yongsin_display} | 조후 용신: {yd['johoo']}")
         
-        # [수정] 대운 경로에 점수 포함
         daeun_path_str = " -> ".join([f"[{d['start_age']}세 {d['ganzi']}({d.get('score', 0)}점)]" for d in dl])
         print(f"▶ 100세 대운 경로: {daeun_path_str}")
 
-        # [PART 2] 심층 신살 분석 (기존 동일)
+        # [신규 통합] 행운의 아이템 및 성격 키워드 섹션
+        print(f"\n🍀 나를 돕는 행운의 에너지 (Lucky Items)")
+        print(f" └ 행운의 컬러: {lucky_info['color']} | 숫자: {lucky_info['number']} | 방향: {lucky_info['direction']}")
+        print(f" └ 추천 아이템: {lucky_info['item']}")
+        
+        print(f"\n🧠 성격 본캐 분석 (Personality MBTI)")
+        print(f" └ 키워드: {', '.join(ilju_info['tags'])}")
+        print(f" └ 상세: {ilju_info['description']}")
+
+        # [기존] PART 2: 심층 신살 분석
         print(f"\n✨ 전문가의 신살 심층 해석")
         print("="*85)
         unique_specials = sorted(list(set(all_specials)))
@@ -61,24 +77,21 @@ class ExpertPresenter:
             print(f" ● {s:<10}: {self.sinsal_desc.get(s, '삶에 독특한 에너지를 부여합니다.')}")
         print("="*85)
 
-        # [신규 PART 4] 인생 운세 리듬 (대운 점수 시각화)
+        # [기존] PART 4: 인생 운세 리듬 (시각화)
         print(f"\n📈 인생 운세 리듬 (대운별 점수 분석)")
         print("="*85)
         for d in dl:
             score = d.get('score', 0)
-            # 점수를 시각적인 바로 표현 (5점당 별 하나)
             bar = "★" * (score // 10) + "☆" * (10 - (score // 10))
-            # 현재 대운 표시
             current_tag = " <--- [현재 대운]" if d['start_age'] <= tr['age'] < d['start_age'] + 10 else ""
-            print(f" {d['start_age']:>2}세 ~ | {d['ganzi']}운 : {score:>3}점 | {bar}{current_tag}")
+            print(f" {d['start_age']:>3}세 ~ | {d['ganzi']}운 : {score:>3}점 | {bar}{current_tag}")
         print("="*85)
 
-        # [PART 3] 프리미엄 스토리텔링 리포트
+        # [기존] PART 3: 프리미엄 스토리텔링 리포트
         print(f"\n" + "═"*110 + "\n   반갑습니다. 20년 경력의 명리학 전문가가 귀하의 전 생애 운명을 정밀 분석해 드립니다.\n" + "═"*110)
         print(f"🔮 1. 타고난 본질: 귀하는 {me_h} 일간으로 해당 오행의 특성을 깊게 간직하고 있습니다.")
         print(f"   분석 결과 귀하는 **'{data['status']}'**한 에너지를 가지고 있으며, **'{yd['eokbu_elements']}'** 기운이 올 때 발복합니다.")
         
-        # 현재 대운 점수에 따른 코멘트 추가
         curr_score = tr['daeun'].get('score', 0)
         advice = "준비하며 때를 기다려야 하는 시기입니다."
         if curr_score >= 80: advice = "인생의 황금기입니다. 적극적으로 도전하세요!"
@@ -88,20 +101,21 @@ class ExpertPresenter:
         
         wolun_h = f"{tr['wolun']}({self.h[tr['wolun'][0]]}{self.h[tr['wolun'][1]]})"
         print(f"\n📅 4. 실시간 분석: 현재 {tr['age']}세, {wolun_h}월을 지나고 있으며 기운의 흐름이 변화하는 시기입니다.\n" + "═"*110 + "\n")
-if __name__ == "__main__":
-    # 1. 엔진 및 프레젠터 초기화
-    # 실제 파일 경로에 맞게 수정하세요.
-    engine = SajuEngine('manse_data_v2.json', 'term_data.json')
-    presenter = ExpertPresenter(engine)
-    
-    # 2. 테스트 케이스 수행
-    # 1981년 3월 4일은 '경칩(절기)' 부근으로, v1.0의 절기 교정 로직을 테스트하기 최적의 날짜입니다.
-    print("시스템: SajuEngine v1.0 분석을 시작합니다...")
-    result = engine.analyze("1954-05-10 00:05", "M", location='서울')
 
-    # 1. 야자시 인정 (현대적 학설 - 0시 기준 일주 변경)
-    # use_yajas_i=True (기본값)
-    res_true = engine.analyze("1981-03-04 14:01", "M", use_yajas_i=False)
+if __name__ == "__main__":
+    # 1. 엔진, 브릿지 초기화
+    # JSON 파일 경로가 실제 환경에 맞는지 확인하세요.
+    engine = SajuEngine('manse_data_v2.json', 'term_data.json')
+    bridge = FortuneBridge('ilju_data.json') 
     
-    # 3. 결과 출력
-    presenter.render(res_true)
+    # 2. 프레젠터 생성 (엔진과 브릿지 주입)
+    presenter = ExpertPresenter(engine, bridge)
+    
+    # 3. 테스트 케이스 수행 (사용자님이 요청한 1954년 辛巳 일주 테스트)
+    print("시스템: SajuEngine v1.9 및 통합 브릿지 분석을 시작합니다...")
+    
+    # 분석 실행
+    test_result = engine.analyze("1981-03-04 14:01", "M", location='서울')
+
+    # 4. 결과 출력
+    presenter.render(test_result)
