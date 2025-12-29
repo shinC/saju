@@ -6,8 +6,7 @@ from FortuneBridge import FortuneBridge
 class ExpertPresenter:
     def __init__(self, engine, bridge):
         self.engine = engine
-        self.bridge = bridge # 브릿지 객체 주입
-        # 한글 변환 매핑
+        self.bridge = bridge 
         self.h = {'甲':'갑','乙':'을','丙':'병','丁':'정','戊':'무','己':'기','庚':'경','辛':'신','壬':'임','癸':'계','子':'자','丑':'축','寅':'인','卯':'묘','辰':'진','巳':'사','午':'오','未':'미','申':'신','酉':'유','戌':'술','亥':'해'}
         self.sinsal_desc = {
             "화개살": "예술적 감수성과 성찰", "현침살": "예리한 분석과 전문 기술", "백호대살": "강력한 리더십과 추진력",
@@ -21,8 +20,9 @@ class ExpertPresenter:
         p = data['pillars']
         yd = data['yongsin_detail']
         dl = data['daeun_list']
+        # [NEW 데이터 추출] 엔진에서 추가한 재물/커리어 분석 데이터
+        wa = data.get('wealth_analysis', {})
         
-        # [추가] 브릿지를 통한 데이터 추출 (MBTI 및 행운 아이템)
         ilju_info = self.bridge.get_ilju_report(data['ilju'])
         lucky_info = self.bridge.get_lucky_report(yd['eokbu_elements'])
 
@@ -50,7 +50,7 @@ class ExpertPresenter:
             print(f"{labels[i]:<5} | {t_gan:<20} | {t_ji:<30} | {spec}")
         print("-" * 145)
 
-        # [기존] 요약 정보 섹션 (삭제 없이 유지)
+        # [기존] 요약 정보 섹션
         print(f"▶ 오행 분석 (점수): {data['scores']}")
         me_h = f"{data['me']}({self.h[data['me']]})"
         yongsin_display = f"{yd['eokbu_elements']} ({yd['eokbu_type']})"
@@ -60,7 +60,7 @@ class ExpertPresenter:
         daeun_path_str = " -> ".join([f"[{d['start_age']}세 {d['ganzi']}({d.get('score', 0)}점)]" for d in dl])
         print(f"▶ 100세 대운 경로: {daeun_path_str}")
 
-        # [신규 통합] 행운의 아이템 및 성격 키워드 섹션
+        # [기존] 행운의 아이템 및 성격 키워드 섹션
         print(f"\n🍀 나를 돕는 행운의 에너지 (Lucky Items)")
         print(f" └ 행운의 컬러: {lucky_info['color']} | 숫자: {lucky_info['number']} | 방향: {lucky_info['direction']}")
         print(f" └ 추천 아이템: {lucky_info['item']}")
@@ -68,6 +68,14 @@ class ExpertPresenter:
         print(f"\n🧠 성격 본캐 분석 (Personality MBTI)")
         print(f" └ 키워드: {', '.join(ilju_info['tags'])}")
         print(f" └ 상세: {ilju_info['description']}")
+
+        # [NEW] 재물 및 커리어 성공 지수 섹션 (추가됨)
+        if wa:
+            print(f"\n💰 재물 및 직업 성공 지수 (Wealth & Success)")
+            w_bar = "●" * (wa['wealth_score'] // 10) + "○" * (10 - (wa['wealth_score'] // 10))
+            c_bar = "●" * (wa['career_score'] // 10) + "○" * (10 - (wa['career_score'] // 10))
+            print(f" └ 평생 재물운: {wa['wealth_grade']:<10} | 점수: {wa['wealth_score']:>3}점 | {w_bar}")
+            print(f" └ 커리어 등급: {wa['career_grade']:<10} | 점수: {wa['career_score']:>3}점 | {c_bar}")
 
         # [기존] PART 2: 심층 신살 분석
         print(f"\n✨ 전문가의 신살 심층 해석")
@@ -77,7 +85,7 @@ class ExpertPresenter:
             print(f" ● {s:<10}: {self.sinsal_desc.get(s, '삶에 독특한 에너지를 부여합니다.')}")
         print("="*85)
 
-        # [기존] PART 4: 인생 운세 리듬 (시각화)
+        # [기존] PART 4: 인생 운세 리듬
         print(f"\n📈 인생 운세 리듬 (대운별 점수 분석)")
         print("="*85)
         for d in dl:
@@ -99,23 +107,21 @@ class ExpertPresenter:
         
         print(f"🔮 2. 대운 분석: 현재 대운 점수는 **{curr_score}점**으로, {advice}")
         
+        # [NEW] 재물운 등급에 따른 스토리텔링 한 줄 추가
+        print(f"🔮 3. 자산 잠재력: 귀하의 재물운 등급은 **'{wa.get('wealth_grade', 'B')}'**형으로, 전략적인 자산 관리가 성공의 핵심입니다.")
+
         wolun_h = f"{tr['wolun']}({self.h[tr['wolun'][0]]}{self.h[tr['wolun'][1]]})"
         print(f"\n📅 4. 실시간 분석: 현재 {tr['age']}세, {wolun_h}월을 지나고 있으며 기운의 흐름이 변화하는 시기입니다.\n" + "═"*110 + "\n")
 
 if __name__ == "__main__":
-    # 1. 엔진, 브릿지 초기화
-    # JSON 파일 경로가 실제 환경에 맞는지 확인하세요.
     engine = SajuEngine('manse_data_v2.json', 'term_data.json')
     bridge = FortuneBridge('ilju_data.json') 
-    
-    # 2. 프레젠터 생성 (엔진과 브릿지 주입)
     presenter = ExpertPresenter(engine, bridge)
     
-    # 3. 테스트 케이스 수행 (사용자님이 요청한 1954년 辛巳 일주 테스트)
-    print("시스템: SajuEngine v1.9 및 통합 브릿지 분석을 시작합니다...")
+    print("시스템: SajuEngine v1.9 및 통합 분석(재물운 포함)을 시작합니다...")
     
-    # 분석 실행
+    # 분석 실행 (사용자님의 생년월일 기준)
     test_result = engine.analyze("1981-03-04 14:01", "M", location='서울')
 
-    # 4. 결과 출력
+    # 결과 출력
     presenter.render(test_result)

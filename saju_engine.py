@@ -8,7 +8,6 @@ class SajuEngine:
         with open(m_file, 'r', encoding='utf-8') as f: self.m_db = json.load(f)
         with open(t_file, 'r', encoding='utf-8') as f: self.t_db = json.load(f)
         self.SIXTY_GANZI = [f"{sc.STEMS[i%10]}{sc.BRANCHES[i%12]}" for i in range(60)]
-
     def _get_historical_correction(self, dt):
         """[Priority 2] 역사적 표준시 및 서머타임 보정 로직 (유지)"""
         offset = 0
@@ -227,16 +226,11 @@ class SajuEngine:
         }
 
     def _calculate_daeun_scores(self, daeun_list, yongsin_info, palja):
-        """
-        [v1.9] 상용화 최종 버전: 지지 용신 보호막(Ji-Yongsin Shield) 적용
-        - 포스텔러/점신 스타일의 '긍정 편향' 보정 로직
-        - 지지가 용신이면 천간/지지의 충돌 감점을 80% 무력화
-        """
+        """[기존 로직 유지]"""
         yong_elements = yongsin_info['eokbu_elements'].split('/')
         sangsaeng = {'목':'화', '화':'토', '토':'금', '금':'수', '수':'목'}
         huising = [sangsaeng.get(y) for y in yong_elements if y in sangsaeng]
         
-        # 합/충 정의 (기존 유지)
         stem_hab = {'甲':'己', '己':'甲', '乙':'庚', '庚':'乙', '丙':'辛', '辛':'丙', '丁':'壬', '壬':'丁', '戊':'癸', '癸':'戊'}
         stem_chung = {'甲':'庚', '庚':'甲', '乙':'辛', '辛':'乙', '丙':'壬', '壬':'丙', '丁':'癸', '癸':'丁'}
         branch_hab = {'子':'丑', '丑':'子', '寅':'亥', '亥':'寅', '卯':'戌', '戌':'卯', '辰':'酉', '酉':'辰', '巳':'申', '申':'巳', '午':'未', '未':'午'}
@@ -248,45 +242,89 @@ class SajuEngine:
         for d in daeun_list:
             d_gan, d_ji = d['ganzi'][0], d['ganzi'][1]
             gan_hj, ji_hj = sc.ELEMENT_MAP.get(d_gan), sc.ELEMENT_MAP.get(d_ji)
-            
-            # 1. 기본 점수 산출
             score = 50 
             if gan_hj in yong_elements: score += 15
             elif gan_hj in huising: score += 7
-            elif gan_hj in ['목', '화', '토', '금', '수']: score -= 10 # 기신 기본 감점
-            
+            elif gan_hj in ['목', '화', '토', '금', '수']: score -= 10 
             if ji_hj in yong_elements: score += 35
             elif ji_hj in huising: score += 18
-            else: score -= 20 # 기신 기본 감점
-            
-            # 2. [상용화 핵심] 지지 용신 보호막 체크
+            else: score -= 20 
             is_ji_good = (ji_hj in yong_elements or ji_hj in huising)
             interaction_offset = 0
-            
-            # 천간 보정 루프
             for n_gan in natal_stems:
                 if stem_hab.get(d_gan) == n_gan: interaction_offset += 5
                 if stem_chung.get(d_gan) == n_gan:
                     penalty = 7
-                    # 지지가 좋으면 천간 충돌은 '정신적 자극'일 뿐, 점수는 깎지 않음 (80% 감쇄)
                     if is_ji_good: penalty = 1 
                     interaction_offset -= penalty
-                
-            # 지지 보정 루프
             for n_ji in natal_branches:
                 if branch_hab.get(d_ji) == n_ji: interaction_offset += 8
                 if branch_chung.get(d_ji) == n_ji:
                     penalty = 12
-                    # 지지가 용신인데 충이 나면 '새로운 터전으로의 확장'으로 해석 (75% 감쇄)
                     if is_ji_good: penalty = 3
                     interaction_offset -= penalty
-            
             d['score'] = max(0, min(100, int(score + interaction_offset)))
-            
         return daeun_list
 
+    # --------------------------------------------------------------------------
+    # [NEW Task 3] 재물운 및 커리어 성공 지수 분석 (Phase 1 완성)
+    # --------------------------------------------------------------------------
+    def _analyze_wealth_and_career(self, pillars, power, yongsin_elements):
+        """재물/커리어 점수 산출 및 등급화"""
+        # 1. 십성 데이터 수집
+        all_ten_gods = []
+        all_specials = []
+        for p in pillars:
+            all_ten_gods.extend([p['t_gan'], p['t_ji']])
+            all_specials.extend(p['special'])
+        
+        # 2. 재물운(Wealth) 분석
+        wealth_score = 40  # 기본 점수
+        j_count = all_ten_gods.count('정재') + all_ten_gods.count('편재')
+        s_count = all_ten_gods.count('식신') + all_ten_gods.count('상관')
+        
+        # 재성이 있고 신강할 때 (득재 가능성)
+        if power >= 50: wealth_score += (j_count * 8)
+        else: wealth_score += (j_count * 4) # 신약할 경우 재다신약 우려
+            
+        # 식상생재 구조 (식상이 재성을 생함)
+        if s_count > 0 and j_count > 0: wealth_score += 15
+        
+        # 신강약 보정
+        if 40 <= power <= 65: wealth_score += 10 # 중화권 보너스
+        elif power < 30 and j_count >= 3: wealth_score -= 15 # 재다신약 감점
+
+        # 3. 커리어(Career) 분석
+        career_score = 40 # 기본 점수
+        g_count = all_ten_gods.count('정관') + all_ten_gods.count('편관')
+        i_count = all_ten_gods.count('정인') + all_ten_gods.count('편인')
+        
+        career_score += (g_count * 10)
+        # 관인상생 (관성과 인성이 함께 있음)
+        if g_count > 0 and i_count > 0: career_score += 15
+        
+        # 4. 신살/귀인 가산점
+        if "천을귀인" in all_specials: wealth_score += 5; career_score += 5
+        if "관귀학관" in all_specials: career_score += 10
+        if "태극귀인" in all_specials: wealth_score += 5
+        if "백호대살" in all_specials: career_score += 5 # 추진력
+
+        # 등급 결정
+        def get_grade(s):
+            if s >= 85: return "S (최상)"
+            elif s >= 70: return "A (우수)"
+            elif s >= 55: return "B (보통)"
+            else: return "C (관리필요)"
+
+        return {
+            "wealth_score": min(100, wealth_score),
+            "career_score": min(100, career_score),
+            "wealth_grade": get_grade(wealth_score),
+            "career_grade": get_grade(career_score)
+        }
+
     def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
-        """메인 분석 오케스트레이터 v1.7 (합/충 보정 포함)"""
+        """메인 분석 오케스트레이터 (재물/커리어 추가)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
@@ -295,7 +333,6 @@ class SajuEngine:
         dt_true_solar = dt_ref + timedelta(minutes=lng_offset + eot_offset)
         
         jasi_type = self._get_jasi_type(dt_true_solar)
-        
         fetch_dt = dt_true_solar
         if not use_yajas_i and jasi_type == "YAJAS-I":
             fetch_dt = dt_true_solar + timedelta(hours=2)
@@ -329,9 +366,10 @@ class SajuEngine:
         pillars = self._investigate_sinsal(palja, me, me_hj_hanja)
         l_term, n_term = self._get_solar_terms(dt_raw)
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
-
-        # [v1.7] palja 인자를 추가로 전달하여 합/충 보정 수행
         daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info, palja)
+
+        # [NEW Task 3 호출]
+        wealth_career = self._analyze_wealth_and_career(pillars, power, yongsin_info['eokbu_elements'])
 
         now = datetime.now()
         current_trace = {
@@ -346,17 +384,15 @@ class SajuEngine:
             "birth": birth_str, 
             "gender": gender, 
             "pillars": pillars, 
-            "ilju": pillars[2]['gan'] + pillars[2]['ji'], # 일주 키 추가
+            "ilju": pillars[2]['gan'] + pillars[2]['ji'],
             "me": me, 
             "me_elem": sc.ELEMENT_MAP[me],
             "scores": scores, 
             "power": power, 
             "status": detailed_status,
-            "yongsin_detail": {
-                "eokbu_elements": yongsin_info['eokbu_elements'],
-                "eokbu_type": yongsin_info['eokbu_type'],
-                "johoo": yongsin_info['johoo']
-            },
+            "yongsin_detail": yongsin_info,
+            # [NEW 데이터 포함]
+            "wealth_analysis": wealth_career,
             "daeun_num": daeun_num, 
             "daeun_list": daeun_list,
             "current_trace": current_trace,
