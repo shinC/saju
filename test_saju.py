@@ -115,7 +115,7 @@ class ExpertPresenter:
         print(f"샤주팔자 { data['interactions']}")
 
 if __name__ == "__main__":
-    engine = SajuEngine('manse_data_v2.json', 'term_data.json')
+    engine = SajuEngine('manse_data.json', 'term_data.json')
     bridge = FortuneBridge('ilju_data.json') 
     presenter = ExpertPresenter(engine, bridge)
     

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>포스텔러 만세력 2.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f9f9f9; -webkit-tap-highlight-color: transparent; }
+        .input-box { border: 1.5px solid #dcdcdc; border-radius: 14px; padding: 12px; font-size: 16px; color: #333; transition: all 0.2s; background: white; }
+        .input-box:focus { border-color: #333; outline: none; }
+        .toggle-btn { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #444; font-size: 16px; user-select: none; padding: 4px 0; }
+        .circle { width: 22px; height: 22px; border: 1.5px solid #dcdcdc; border-radius: 50%; position: relative; transition: all 0.2s; background: white; flex-shrink: 0; }
+        .toggle-btn.active .circle { border-color: #4a4542; background-color: #4a4542; }
+        .toggle-btn.active .circle::after { content: ''; position: absolute; width: 8px; height: 8px; background: white; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #citySheet { transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        #citySheet.show { transform: translateY(0); }
+        .sheet-overlay { opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .sheet-overlay.show { opacity: 1; pointer-events: auto; }
+        .time-modal-content { background-color: #4a4542; color: white; border-radius: 28px; width: 92%; max-width: 400px; }
+        .time-table { border-collapse: collapse; width: 100%; font-size: 14px; color: #ececec; }
+        .time-table th, .time-table td { border: 1px solid #635e5b; padding: 12px 8px; text-align: center; }
+        .time-table th { background-color: #5a5552; color: #cfcfcf; font-weight: 500; }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4">
+
+    <form id="sajuForm" action="/analyze_web" method="POST" class="w-full max-w-md bg-white rounded-[32px] shadow-sm p-7 space-y-8 mt-4">
+        <h1 class="text-center font-bold text-[20px] mb-2">포스텔러 만세력 2.2 🌟</h1>
+
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">이름</label>
+            <input type="text" name="name" id="name" placeholder="최대 12글자 이내" class="w-full border-0 border-b border-gray-200 py-3 text-[16px] focus:border-black outline-none transition-colors" required>
+        </div>
+
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">성별</label>
+            <input type="hidden" name="gender" id="hiddenGender" value="F">
+            <div class="flex gap-2">
+                <button type="button" onclick="setGender('F')" id="btnF" class="flex-1 py-3.5 rounded-2xl border-[1.5px] border-[#333] font-bold text-[16px] bg-white transition-all">여자</button>
+                <button type="button" onclick="setGender('M')" id="btnM" class="flex-1 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-[16px] transition-all">남자</button>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <div class="flex justify-between items-center">
+                <label class="font-bold text-[17px] text-[#333]">생년월일시</label>
+                <div onclick="toggleTimeModal(true)" class="text-[15px] text-[#666] cursor-pointer flex items-center gap-1">
+                    12간지 시간표 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+            </div>
+            
+            <div class="flex gap-2">
+                <select name="calendar_type" id="calendarType" class="input-box w-[90px] text-center text-black font-medium">
+                    <option value="양력">양력</option>
+                    <option value="음력">음력</option>
+                </select>
+                <input type="text" name="birth_date" id="birthDate" maxlength="10" placeholder="2022/04/06" class="input-box flex-1 text-center" oninput="maskDate(this)" required>
+                <input type="text" name="birth_time" id="birthTime" maxlength="5" placeholder="19:00" class="input-box w-[100px] text-center" oninput="maskTime(this)" required>
+            </div>
+            
+            <input type="hidden" name="use_yajas_i" id="hiddenYajas" value="false">
+            <div class="flex gap-6 pt-1">
+                <div onclick="handleToggle('timeUnknown')" class="toggle-btn" id="toggle_timeUnknown">
+                    <div class="circle"></div>
+                    <span>시간 모름</span>
+                </div>
+                <div onclick="handleToggle('yajas')" class="toggle-btn" id="toggle_yajas">
+                    <div class="circle"></div>
+                    <span>야자시/조자시 <svg class="w-4 h-4 text-gray-400 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">태어난 도시</label>
+            <input type="hidden" name="location" id="hiddenLocation" value="">
+            <div onclick="openCitySheet()" id="displayLocation" class="input-box cursor-pointer flex justify-between items-center bg-white">
+                <span id="locText" class="text-[#b5b5b5]">도시명을 입력하세요</span>
+                <svg class="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+        </div>
+
+        <button type="button" onclick="submitSaju()" class="w-full bg-[#333] text-white py-4.5 rounded-full font-bold text-[18px] mt-6">만세력 보러가기</button>
+    </form>
+
+    <div id="sheetOverlay" onclick="closeCitySheet()" class="sheet-overlay fixed inset-0 bg-black/40 z-40"></div>
+    <div id="citySheet" class="fixed bottom-0 left-0 right-0 bg-white z-50 rounded-t-[36px] p-7 h-[85vh] flex flex-col shadow-2xl">
+        <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-8"></div>
+        <div class="relative mb-8">
+            <input type="text" id="citySearch" oninput="searchCity(this.value)" placeholder="시군구 단위로 검색" class="input-box w-full pr-12 !text-black border-[#e5e5e5]">
+            <svg class="absolute right-4 top-3.5 w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <div id="cityResults" class="flex-1 overflow-y-auto space-y-4 pt-4 border-t border-gray-100"></div>
+    </div>
+
+    <div id="timeModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center">
+        <div onclick="toggleTimeModal(false)" class="absolute inset-0 bg-black/60"></div>
+        <div class="time-modal-content relative p-7 shadow-2xl">
+            <h2 class="text-[22px] font-bold mb-5">12간지 시간표</h2>
+            <table class="time-table">
+                <thead><tr><th>간지</th><th>시간</th></tr></thead>
+                <tbody><tr><td>자시</td><td>23:30~01:30</td></tr><tr><td>축시</td><td>01:30~03:30</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let sajuState = { gender: 'F', timeUnknown: false, yajas: false, location: '' };
+
+        const KOREA_CITIES = ["서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "세종특별자치시", "경기도 수원시", "제주특별자치도 제주시"];
+
+        function maskDate(obj) {
+            let val = obj.value.replace(/\D/g, "");
+            let res = "";
+            if (val.length > 0) {
+                res += val.substring(0, 4);
+                if (val.length >= 4) { res += "/"; if (val.length > 4) { res += val.substring(4, 6); if (val.length >= 6) { res += "/"; if (val.length > 6) res += val.substring(6, 8); } } }
+            }
+            obj.value = res;
+        }
+
+        function maskTime(obj) {
+            let val = obj.value.replace(/\D/g, "");
+            let res = "";
+            if (val.length > 0) { res += val.substring(0, 2); if (val.length >= 2) { res += ":"; if (val.length > 2) res += val.substring(2, 4); } }
+            obj.value = res;
+        }
+
+        function handleToggle(key) {
+            const otherKey = (key === 'timeUnknown') ? 'yajas' : 'timeUnknown';
+            const isTurningOn = !sajuState[key];
+            sajuState[key] = isTurningOn;
+            updateToggleUI(key);
+
+            if (isTurningOn) {
+                sajuState[otherKey] = false;
+                updateToggleUI(otherKey);
+            }
+
+            // [추가] hidden 필드 동기화
+            document.getElementById('hiddenYajas').value = sajuState.yajas;
+
+            const timeInput = document.getElementById('birthTime');
+            timeInput.style.opacity = sajuState.timeUnknown ? "0.3" : "1";
+            timeInput.disabled = sajuState.timeUnknown;
+            if(sajuState.timeUnknown) timeInput.value = "12:00"; // 시간 모를 때 기본값
+        }
+
+        function updateToggleUI(key) {
+            const el = document.getElementById('toggle_' + key);
+            if (sajuState[key]) el.classList.add('active');
+            else el.classList.remove('active');
+        }
+
+        function searchCity(val) {
+            const results = document.getElementById('cityResults');
+            if (!val) { results.innerHTML = '<p class="text-center py-20 text-[#999]">전국 도시명을 입력해주세요.</p>'; return; }
+            const filtered = KOREA_CITIES.filter(city => city.includes(val));
+            results.innerHTML = filtered.map(city => `<div onclick="selectCity('${city}')" class="py-3 px-2 text-[17px] text-[#333] cursor-pointer hover:bg-gray-50 border-b border-gray-50">${city}</div>`).join('');
+        }
+
+        function selectCity(city) {
+            sajuState.location = city;
+            document.getElementById('hiddenLocation').value = city; // hidden 필드 동기화
+            const locText = document.getElementById('locText');
+            locText.innerText = city; locText.classList.replace('text-[#b5b5b5]', 'text-black');
+            closeCitySheet();
+        }
+
+        function setGender(g) {
+            sajuState.gender = g;
+            document.getElementById('hiddenGender').value = g; // hidden 필드 동기화
+            document.getElementById('btnF').className = g === 'F' ? 'flex-1 py-3.5 rounded-2xl border-[1.5px] border-[#333] font-bold text-[16px] bg-white' : 'flex-1 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-[16px]';
+            document.getElementById('btnM').className = g === 'M' ? 'flex-1 py-3.5 rounded-2xl border-[1.5px] border-[#333] font-bold text-[16px] bg-white' : 'flex-1 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-[16px]';
+        }
+
+        function toggleTimeModal(show) { document.getElementById('timeModal').classList.toggle('hidden', !show); }
+        function openCitySheet() { document.getElementById('sheetOverlay').classList.add('show'); document.getElementById('citySheet').classList.add('show'); setTimeout(() => document.getElementById('citySearch').focus(), 300); }
+        function closeCitySheet() { document.getElementById('sheetOverlay').classList.remove('show'); document.getElementById('citySheet').classList.remove('show'); }
+
+        // [최종 수정] 폼 제출 함수
+        function submitSaju() {
+            const name = document.getElementById('name').value;
+            const date = document.getElementById('birthDate').value;
+            const loc = sajuState.location;
+
+            if(!name || !date || date.length < 10) return alert("이름과 생년월일을 정확히 입력해주세요.");
+            if(!loc) return alert("태어난 도시를 선택해주세요.");
+
+            // 폼 제출 실행 -> main.py의 /analyze_web 호출 및 result.html로 이동
+            document.getElementById('sajuForm').submit();
+        }
+    </script>
+</body>
+</html>

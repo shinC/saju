@@ -413,7 +413,7 @@ class SajuEngine:
 
         return results
     
-    def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
+    def analyze(self, birth_str, gender, location, use_yajas_i):
         """메인 분석 오케스트레이터 (재물/커리어 추가)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
         hist_offset = self._get_historical_correction(dt_raw)

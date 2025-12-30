@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>분석 결과</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f5f5f5; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 오행 컬러 클래스 */
+        .text-목 { color: #50808e; } .bg-목 { background-color: #50808e; }
+        .text-화 { color: #e16a6a; } .bg-화 { background-color: #e16a6a; }
+        .text-토 { color: #e9c46a; } .bg-토 { background-color: #e9c46a; }
+        .text-금 { color: #9a9a9a; } .bg-금 { background-color: #9a9a9a; }
+        .text-수 { color: #333333; } .bg-수 { background-color: #333333; }
+    </style>
+</head>
+<body class="max-w-md mx-auto bg-white min-h-screen pb-20 shadow-xl">
+
+    <header class="p-6 border-b flex items-center gap-4">
+        <div class="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center text-3xl">🐱</div>
+        <div>
+            <h1 class="text-xl font-bold text-gray-800">{{ result.name }}님</h1>
+            <p class="text-sm font-medium text-gray-500">
+                {{ ilju_info.title }} ({{ result.ilju }})
+            </p>
+        </div>
+    </header>
+
+    <div class="px-6 py-4 bg-gray-50 text-[12px] text-gray-400 leading-relaxed border-b">
+        <p>양 {{ result.solar_display }} {{ result.gender_str }} {{ result.location }}</p>
+        <p class="text-blue-400">음(평달) {{ result.lunar_display | default('정보없음') }} {{ result.gender_str }} {{ result.location }}</p>
+        <p class="text-black font-bold">
+            <span class="text-red-400 font-bold">양</span> {{ result.corrected_display }} {{ result.gender_str }} {{ result.location }} 
+            <span class="text-red-400">(지역시 {{ result.lng_diff_str }})</span>
+        </p>
+    </div>
+
+    <section class="p-5">
+        <div class="grid grid-cols-4 gap-2 text-center">
+            {% for p_name in ['생시', '생일', '생월', '생년'] %}
+            <div class="text-[11px] text-gray-400">{{ p_name }}</div>
+            {% endfor %}
+            
+            {% for p in result.pillars|reverse %}
+            <div class="bg-white border border-gray-100 rounded-2xl p-3 shadow-sm space-y-2">
+                <div class="text-[10px] text-gray-400">{{ p.t_gan }}</div>
+                <div class="text-2xl font-bold text-{{ p.gan_elem }}">
+                    {{ p.gan }}<span class="text-xs font-light text-gray-400 ml-0.5">{{ h[p.gan] }}</span>
+                </div>
+                <div class="text-2xl font-bold text-{{ p.ji_elem }}">
+                    {{ p.ji }}<span class="text-xs font-light text-gray-400 ml-0.5">{{ h[p.ji] }}</span>
+                </div>
+                <div class="text-[10px] text-gray-400">{{ p.t_ji }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="px-5">
+        <div class="bg-[#4d4d4d] text-white p-3 rounded-t-2xl flex justify-between items-center text-xs">
+            <span class="font-bold">사주 분석 태그</span>
+            <span>▲</span>
+        </div>
+        <div class="border border-t-0 p-4 rounded-b-2xl bg-gray-50/50">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                {% for tag in result.display_tags %}
+                <span class="px-3 py-1 bg-white border border-gray-200 rounded-full text-[11px] whitespace-nowrap">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="p-6 mt-4">
+        <h2 class="text-lg font-bold mb-4">신강/신약 분석</h2>
+        <div class="bg-gray-50 p-6 rounded-[28px] border border-gray-100">
+            <p class="text-sm text-gray-600 mb-4">
+                {{ result.name }}님은 <span class="font-bold text-black">{{ result.status }}</span> 사주입니다.
+            </p>
+            <div class="relative h-2 bg-gray-200 rounded-full mt-8">
+                <div class="absolute -top-7 left-0 text-[10px] text-gray-400">에너지 지수: {{ result.power }}</div>
+                <div class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
+                     style="left: {{ result.power }}%;"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="p-6">
+        <h2 class="text-lg font-bold mb-4">대운 (대운수: {{ result.daeun_num }})</h2>
+        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-4">
+            {% for d in result.daeun_list %}
+            <div class="flex-shrink-0 w-16 text-center space-y-1">
+                <div class="text-[10px] text-gray-400">{{ d.start_age }}세</div>
+                <div class="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                    <div class="py-2 bg-gray-50 text-sm font-bold border-b">{{ d.ganzi[0] }}</div>
+                    <div class="py-2 bg-white text-sm font-bold">{{ d.ganzi[1] }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around py-3 text-[10px] text-gray-400 z-50">
+        <div class="text-center text-black font-bold">🔮 사주분석</div>
+        <div class="text-center">🍀 행운정보</div>
+        <div class="text-center">📅 일진달력</div>
+    </nav>
+
+</body>
+</html>
