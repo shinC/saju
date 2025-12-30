@@ -112,6 +112,7 @@ class ExpertPresenter:
 
         wolun_h = f"{tr['wolun']}({self.h[tr['wolun'][0]]}{self.h[tr['wolun'][1]]})"
         print(f"\n📅 4. 실시간 분석: 현재 {tr['age']}세, {wolun_h}월을 지나고 있으며 기운의 흐름이 변화하는 시기입니다.\n" + "═"*110 + "\n")
+        print(f"샤주팔자 { data['interactions']}")
 
 if __name__ == "__main__":
     engine = SajuEngine('manse_data_v2.json', 'term_data.json')
@@ -121,7 +122,7 @@ if __name__ == "__main__":
     print("시스템: SajuEngine v1.9 및 통합 분석(재물운 포함)을 시작합니다...")
     
     # 분석 실행 (사용자님의 생년월일 기준)
-    test_result = engine.analyze("1981-03-04 14:01", "M", location='서울')
+    test_result = engine.analyze("1954-10-05 16:01", "W", location='서울')
 
     # 결과 출력
     presenter.render(test_result)

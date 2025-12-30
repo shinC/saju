@@ -322,7 +322,97 @@ class SajuEngine:
             "wealth_grade": get_grade(wealth_score),
             "career_grade": get_grade(career_score)
         }
+    # --------------------------------------------------------------------------
+    # [NEW Task] 사주 원국 내 11가지 상호작용 분석 (합, 충, 형, 파, 해, 원진, 공망)
+    # --------------------------------------------------------------------------
+    def _analyze_interactions(self, palja):
+        """
+        [v2.2] 11가지 관계 분석 및 한글화 출력 엔진 (ValueError 수정 버전)
+        """
+        # 지지 한자 -> 한글 변환 맵
+        B_HAN_TO_KOR = {
+            '子': '자', '丑': '축', '寅': '인', '卯': '묘', '辰': '진', '巳': '사',
+            '午': '오', '未': '미', '申': '신', '酉': '유', '戌': '술', '亥': '해'
+        }
 
+        # 1. 기초 데이터 정의
+        STEM_HAB = {"甲己": "갑기합", "乙庚": "을경합", "丙辛": "병신합", "丁壬": "정임합", "戊癸": "무계합"}
+        STEM_CHUNG = {"甲庚": "갑경충", "乙辛": "을신충", "丙壬": "병임충", "丁癸": "정계충"}
+        B_HAB_6 = {"子丑": "자축육합", "寅亥": "인해육합", "卯戌": "묘술육합", "辰酉": "진유육합", "巳申": "사신육합", "午未": "오미육합"}
+        
+        # [수정] 모든 튜플의 개수를 (명칭, 왕지) 2개로 통일했습니다.
+        B_SAMHAP = {
+            "亥卯未": ("목국", "卯"), 
+            "寅午戌": ("화국", "午"), 
+            "巳酉丑": ("금국", "酉"), 
+            "申子辰": ("수국", "子")
+        }
+        
+        B_BANGHAP = {"寅卯辰": "목국(방합)", "巳午未": "화국(방합)", "申酉戌": "금국(방합)", "亥子丑": "수국(방합)"}
+        B_CHUNG = {"子午": "자오충", "丑未": "축미충", "寅申": "인신충", "卯酉": "묘유충", "辰戌": "진술충", "巳亥": "사해충"}
+        B_HYUNG = {"寅巳": "인사형", "巳申": "사신형", "申寅": "신인형", "丑戌": "축술형", "戌未": "술미형", "未丑": "미축형", 
+                   "子卯": "자묘형", "辰辰": "진진자형", "午午": "오오자형", "酉酉": "유유자형", "亥亥": "해해자형"}
+        B_PA = {"子酉": "자유파", "卯午": "묘오파", "辰丑": "진축파", "未戌": "미술파", "寅亥": "인해파", "巳申": "사신파"}
+        B_HAE = {"子未": "자미해", "丑午": "축오해", "寅巳": "인사해", "卯辰": "묘진해", "申亥": "신해해", "酉戌": "유술해"}
+        B_WONJIN = {"子未": "자미원진", "丑午": "축오원진", "寅酉": "인유원진", "卯申": "묘신원진", "辰亥": "진해원진", "巳戌": "사술원진"}
+
+        results = {
+            "천간합": [], "천간충": [], "지지육합": [], "지지삼합": [], 
+            "지지방합": [], "지지충": [], "형": [], "파": [], 
+            "해": [], "원진": [], "공망": []
+        }
+
+        s_list = [palja[0], palja[2], palja[4], palja[6]]
+        b_list = [palja[1], palja[3], palja[5], palja[7]]
+        
+        # 2. 천간 관계
+        for i in range(4):
+            for j in range(i + 1, 4):
+                pair = "".join(sorted([s_list[i], s_list[j]]))
+                if pair in STEM_HAB: results["천간합"].append(STEM_HAB[pair])
+                if pair in STEM_CHUNG: results["천간충"].append(STEM_CHUNG[pair])
+        
+        # 3. 지지 2글자 관계
+        for i in range(4):
+            for j in range(i + 1, 4):
+                pair = "".join(sorted([b_list[i], b_list[j]]))
+                if pair in B_HAB_6: results["지지육합"].append(B_HAB_6[pair])
+                if pair in B_CHUNG: results["지지충"].append(B_CHUNG[pair])
+                if pair in B_HYUNG: results["형"].append(B_HYUNG[pair])
+                if pair in B_PA: results["파"].append(B_PA[pair])
+                if pair in B_HAE: results["해"].append(B_HAE[pair])
+                if pair in B_WONJIN: results["원진"].append(B_WONJIN[pair])
+        
+        # 4. 삼합 및 방합 (반합 로직)
+        for key, (val, king) in B_SAMHAP.items():
+            match_chars = [c for c in key if c in b_list]
+            if len(set(match_chars)) >= 3:
+                results["지지삼합"].append(f"{val} 삼합({key})")
+            elif len(set(match_chars)) == 2 and king in b_list:
+                kor_pair = "".join([B_HAN_TO_KOR[c] for c in key if c in b_list])
+                results["지지삼합"].append(f"{kor_pair} 반합({val})")
+
+        for key, val in B_BANGHAP.items():
+            match_chars = [c for c in key if c in b_list]
+            if len(set(match_chars)) >= 3:
+                results["지지방합"].append(f"{val}")
+            elif len(set(match_chars)) == 2:
+                kor_pair = "".join([B_HAN_TO_KOR[c] for c in key if c in b_list])
+                results["지지방합"].append(f"{kor_pair} 반합")
+
+        # 5. 공망
+        ilju_idx = self.SIXTY_GANZI.index(palja[4] + palja[5])
+        gongmang_jis = sc.GONGMANG_MAP[ilju_idx // 10]
+        for i, b_char in enumerate(b_list):
+            if b_char in gongmang_jis:
+                pos = ["년지", "월지", "일지", "시지"][i]
+                results["공망"].append(f"{pos} 공망({B_HAN_TO_KOR.get(b_char, b_char)})")
+
+        for k in results:
+            results[k] = sorted(list(set(results[k])))
+
+        return results
+    
     def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
         """메인 분석 오케스트레이터 (재물/커리어 추가)"""
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
@@ -379,6 +469,7 @@ class SajuEngine:
             "wolun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('mG', 'N/A'),
             "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
         }
+        interactions = self._analyze_interactions(palja)
 
         return {
             "birth": birth_str, 
@@ -396,5 +487,6 @@ class SajuEngine:
             "daeun_num": daeun_num, 
             "daeun_list": daeun_list,
             "current_trace": current_trace,
+            "interactions": interactions, # 11가지 관계 분석 결과 추가
             "jasi_type": jasi_type
         }
