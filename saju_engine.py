@@ -413,10 +413,10 @@ class SajuEngine:
 
         return results
 
-    def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
+    def analyze(self, birth_str, gender, location, use_yajas_i):
         """
         메인 분석 오케스트레이터 (v2.3 최종 통합본)
-        - 지역 보정, UI용 디스플레이 데이터, 현재 운의 흐름(current_trace)을 모두 포함합니다.
+        - 음력 날짜 포맷팅 로직을 강화하여 스크린샷과 동일한 형식을 보장합니다.
         """
         # 1. 입력 시각 파싱 및 지역 보정
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
@@ -424,7 +424,6 @@ class SajuEngine:
         target_lng = sc.CITY_DATA.get(city_key, 126.97)
         
         lng_offset_exact = (target_lng - 135) * 4
-        
         lng_offset_display = int(round(lng_offset_exact))
         
         hist_offset = self._get_historical_correction(dt_raw)
@@ -444,6 +443,24 @@ class SajuEngine:
         day_data = self.m_db.get(day_key)
         if not day_data: return {"error": f"Data not found for {day_key}"}
         
+        # --- [음력 데이터 처리 로직 강화] ---
+        ly = day_data.get('ly')
+        lm = day_data.get('lm')
+        ld = day_data.get('ld')
+        ls = day_data.get('ls', False) 
+        
+        # 입력받은 원본 시각 추출 (dt_raw 활용)
+        birth_time_str = dt_raw.strftime("%H:%M")
+        
+        if ly and lm and ld:
+            # 날짜 뒤에 시간을 추가 (예: 1981/01/28 14:01)
+            lunar_display = f"{ly}/{lm:02d}/{ld:02d} {birth_time_str}"
+            lunar_type = "윤" if ls else "평"
+        else:
+            lunar_display = "정보 없음"
+            lunar_type = "평"
+        # ----------------------------------
+
         yG, mG, dG = day_data['yG'], day_data['mG'], day_data['dG']
         yG, mG = self._apply_solar_correction(dt_raw, yG, mG)
         
@@ -468,7 +485,6 @@ class SajuEngine:
         yongsin_info = self._get_yongsin_info(palja, power, me_hj_hanja)
         pillars = self._investigate_sinsal(palja, me, me_hj_hanja)
         
-        # UI용 오행 데이터 주입
         for p in pillars:
             p['gan_elem'] = sc.ELEMENT_MAP.get(p['gan'])
             p['ji_elem'] = sc.ELEMENT_MAP.get(p['ji'])
@@ -477,15 +493,13 @@ class SajuEngine:
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
         daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info, palja)
         
-        # 4. [복구 완료] 현재 운의 흐름 (current_trace)
+        # 4. 현재 운의 흐름 (current_trace)
         now = datetime.now()
         current_age = now.year - dt_raw.year + 1
         current_trace = {
             "date": now.strftime("%Y-%m-%d"), 
             "age": current_age,
-            # 현재 나이에 해당하는 대운 찾기
             "daeun": next((d for d in daeun_list if d['start_age'] <= current_age < d['start_age'] + 10), daeun_list[0]),
-            # 오늘 날짜의 세운, 월운, 일운 데이터 가져오기
             "seun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('yG', 'N/A'),
             "wolun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('mG', 'N/A'),
             "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
@@ -501,7 +515,7 @@ class SajuEngine:
         return {
             "solar_display": dt_raw.strftime("%Y/%m/%d %H:%M"),
             "corrected_display": dt_true_solar.strftime("%Y/%m/%d %H:%M"),
-            "lunar_display": day_data.get('lunar', "정보 없음"),
+            "lunar_display": lunar_display, # 가공된 음력 날짜 반환
             "lng_diff_str": f"{lng_offset_display}분" if lng_offset_display < 0 else f"+{lng_offset_display}분",
             "gender_str": "여자" if gender == "F" else "남자",
             "location_name": location,
@@ -519,7 +533,7 @@ class SajuEngine:
             "wealth_analysis": wealth_career,
             "daeun_num": daeun_num, 
             "daeun_list": daeun_list,
-            "current_trace": current_trace, # 복구된 데이터
+            "current_trace": current_trace,
             "interactions": interactions,
             "jasi_type": jasi_type
         }

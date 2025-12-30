@@ -38,13 +38,13 @@ async def read_root(request: Request):
 @app.post("/analyze_web", response_class=HTMLResponse)
 async def analyze_web(
     request: Request,
-    name: str = Form("아무개"),
+    name: str = Form(...),
     gender: str = Form(...),
     birth_date: str = Form(...),
     birth_time: str = Form(...),
-    calendar_type: str = Form("양력"),
-    location: str = Form("서울특별시, 대한민국"),
-    use_yajas_i: bool = Form(False)
+    calendar_type: str = Form(...),
+    location: str = Form(...),
+    use_yajas_i: bool = Form(...)
 ):
     if engine is None:
         raise HTTPException(status_code=500, detail="엔진 미로드 상태입니다.")
