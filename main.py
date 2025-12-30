@@ -66,7 +66,8 @@ async def analyze_web(
             birth_str=birth_str, 
             gender=gender, 
             location=location, 
-            use_yajas_i=use_yajas_i
+            use_yajas_i=use_yajas_i,
+            calendar_type=calendar_type
         )
 
         # 3. 엔진이 모르는 사용자 '이름' 정보만 결과에 추가

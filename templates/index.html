@@ -52,9 +52,10 @@
             </div>
             
             <div class="flex gap-2">
-                <select name="calendar_type" id="calendarType" class="input-box w-[90px] text-center text-black font-medium">
+                <select name="calendar_type" id="calendarType" class="input-box w-[120px] text-center text-black font-medium">
                     <option value="양력">양력</option>
                     <option value="음력">음력</option>
+                    <option value="음력(윤달)">음력(윤달)</option>
                 </select>
                 <input type="text" name="birth_date" id="birthDate" maxlength="10" placeholder="1981/03/04" class="input-box flex-1 text-center" oninput="maskDate(this)" required>
                 <input type="text" name="birth_time" id="birthTime" maxlength="5" placeholder="14:01" class="input-box w-[100px] text-center" oninput="maskTime(this)" required>

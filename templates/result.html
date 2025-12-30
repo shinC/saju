@@ -31,8 +31,13 @@
     </header>
 
     <div class="px-6 py-4 bg-gray-50 text-[12px] text-gray-400 leading-relaxed border-b">
-        <p>양 {{ result.solar_display }} {{ result.gender_str }} {{ result.location }}</p>
-        <p class="text-blue-400">음(평달) {{ result.lunar_display | default('정보없음') }} {{ result.gender_str }} {{ result.location }}</p>
+        <p>양 {{ result.solar_display }} {{ result.gender_str }} {{ result.location_name }}</p>
+       <p class="text-blue-400">
+            음({{ result.lunar_type | default('평') }}달) 
+            {{ result.lunar_display | default('정보없음') }} 
+            {{ result.gender_str }} 
+            {{ result.location_name }}
+        </p>
         <p class="text-black font-bold">
             <span class="text-red-400 font-bold">양</span> {{ result.corrected_display }} {{ result.gender_str }} {{ result.location }} 
             <span class="text-red-400">(지역시 {{ result.lng_diff_str }})</span>

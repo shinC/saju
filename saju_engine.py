@@ -413,13 +413,42 @@ class SajuEngine:
 
         return results
 
-    def analyze(self, birth_str, gender, location, use_yajas_i):
+    def analyze(self, birth_str, gender, location, use_yajas_i, calendar_type="양력"):
         """
         메인 분석 오케스트레이터 (v2.4 전국 시·군 정밀 보정 버전)
         - sc.CITY_DATA의 전체 키값과 1:1 매칭하여 정밀한 지역 보정을 수행합니다.
         """
         # 1. 입력 시각 파싱
-        dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
+        # 1. 입력 시각 파싱
+        dt_input = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
+        input_time = dt_input.strftime("%H:%M")
+       
+        # 2. 음력 또는 음력(윤달)일 경우 양력 날짜 역산
+        if calendar_type in ["음력", "음력(윤달)"]:
+            i_y, i_m, i_d = dt_input.year, dt_input.month, dt_input.day
+            
+            # 🔥 "음력(윤달)" 문자열이 들어오면 윤달(ls=True)로 검색
+            is_leap_input = (calendar_type == "음력(윤달)")
+            
+            found_solar_key = None
+            for s_key, data in self.m_db.items():
+                if (data.get('ly') == i_y and 
+                    data.get('lm') == i_m and 
+                    data.get('ld') == i_d and 
+                    data.get('ls') == is_leap_input):
+                    found_solar_key = s_key
+                    break
+            
+            if not found_solar_key:
+                # 에러 메시지도 사용자 선택 값에 맞춰 출력
+                return {"error": f"입력하신 {calendar_type} 날짜({i_y}/{i_m}/{i_d})를 찾을 수 없습니다."}
+            
+            # 찾은 양력 날짜로 분석용 birth_str 재조립
+            birth_str = f"{found_solar_key[:4]}-{found_solar_key[4:6]}-{found_solar_key[6:]} {input_time}"
+            dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
+        else:
+            # "양력"이거나 값이 없을 경우 (디폴트)
+            dt_raw = dt_input
         
         # 2. 전국 시·군 정밀 경도 매칭 (Exact Match)
         # 이제 [:2]를 하지 않고 사용자가 선택한 전체 명칭(예: "경기도 수원시")을 직접 찾습니다.
@@ -433,10 +462,11 @@ class SajuEngine:
         # 3. 시간 보정 연산 (역사적 표준시 + 균시차 + 정밀 지역 오프셋)
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
-        eot_offset = self._get_equation_of_time(dt_ref)
+        #eot_offset = self._get_equation_of_time(dt_ref)
         
         # 엔진 연산은 초 단위까지 정확한 dt_true_solar를 사용합니다.
-        dt_true_solar = dt_ref + timedelta(minutes=lng_offset_exact + eot_offset)
+        #dt_true_solar = dt_ref + timedelta(minutes=lng_offset_exact)
+        dt_true_solar = dt_ref + timedelta(minutes=lng_offset_display)
         
         # 4. 분석 수행 (야자시/조자시 및 절기 보정)
         jasi_type = self._get_jasi_type(dt_true_solar)
@@ -515,6 +545,7 @@ class SajuEngine:
         # 7. 최종 데이터 반환
         return {
             "solar_display": dt_raw.strftime("%Y/%m/%d %H:%M"),
+            "calendar_type" : calendar_type,
             "corrected_display": dt_true_solar.strftime("%Y/%m/%d %H:%M"),
             "lunar_display": lunar_display,
             "lunar_type": lunar_type,
