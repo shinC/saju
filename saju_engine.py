@@ -412,16 +412,29 @@ class SajuEngine:
             results[k] = sorted(list(set(results[k])))
 
         return results
-    
-    def analyze(self, birth_str, gender, location, use_yajas_i):
-        """메인 분석 오케스트레이터 (재물/커리어 추가)"""
+
+    def analyze(self, birth_str, gender, location='서울', use_yajas_i=True):
+        """
+        메인 분석 오케스트레이터 (v2.3 최종 통합본)
+        - 지역 보정, UI용 디스플레이 데이터, 현재 운의 흐름(current_trace)을 모두 포함합니다.
+        """
+        # 1. 입력 시각 파싱 및 지역 보정
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
+        city_key = location[:2]
+        target_lng = sc.CITY_DATA.get(city_key, 126.97)
+        
+        lng_offset_exact = (target_lng - 135) * 4
+        
+        lng_offset_display = int(round(lng_offset_exact))
+        
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
         eot_offset = self._get_equation_of_time(dt_ref)
-        lng_offset = (sc.CITY_DATA.get(location, 126.97) - 135) * 4
-        dt_true_solar = dt_ref + timedelta(minutes=lng_offset + eot_offset)
         
+        # 정밀 태양시 계산
+        dt_true_solar = dt_ref + timedelta(minutes=lng_offset_exact + eot_offset)
+        
+        # 2. 분석 수행 (야자시/조자시 및 절기 보정)
         jasi_type = self._get_jasi_type(dt_true_solar)
         fetch_dt = dt_true_solar
         if not use_yajas_i and jasi_type == "YAJAS-I":
@@ -449,29 +462,50 @@ class SajuEngine:
         
         palja = [yG[0], yG[1], mG[0], mG[1], dG[0], dG[1], hG[0], hG[1]]
         
+        # 3. 각종 분석 (신강약, 용신, 신살, 대운 등)
         scores, power = self._calculate_power(palja, me_hj_hanja)
         detailed_status = self._get_detailed_status(power)
         yongsin_info = self._get_yongsin_info(palja, power, me_hj_hanja)
-        
         pillars = self._investigate_sinsal(palja, me, me_hj_hanja)
+        
+        # UI용 오행 데이터 주입
+        for p in pillars:
+            p['gan_elem'] = sc.ELEMENT_MAP.get(p['gan'])
+            p['ji_elem'] = sc.ELEMENT_MAP.get(p['ji'])
+            
         l_term, n_term = self._get_solar_terms(dt_raw)
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
         daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info, palja)
-
-        # [NEW Task 3 호출]
-        wealth_career = self._analyze_wealth_and_career(pillars, power, yongsin_info['eokbu_elements'])
-
+        
+        # 4. [복구 완료] 현재 운의 흐름 (current_trace)
         now = datetime.now()
+        current_age = now.year - dt_raw.year + 1
         current_trace = {
-            "date": now.strftime("%Y-%m-%d"), "age": now.year - dt_raw.year + 1,
-            "daeun": next((d for d in daeun_list if d['start_age'] <= (now.year - dt_raw.year + 1) < d['start_age'] + 10), daeun_list[0]),
+            "date": now.strftime("%Y-%m-%d"), 
+            "age": current_age,
+            # 현재 나이에 해당하는 대운 찾기
+            "daeun": next((d for d in daeun_list if d['start_age'] <= current_age < d['start_age'] + 10), daeun_list[0]),
+            # 오늘 날짜의 세운, 월운, 일운 데이터 가져오기
             "seun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('yG', 'N/A'),
             "wolun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('mG', 'N/A'),
             "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
         }
-        interactions = self._analyze_interactions(palja)
 
+        wealth_career = self._analyze_wealth_and_career(pillars, power, yongsin_info['eokbu_elements'])
+        interactions = self._analyze_interactions(palja)
+        
+        display_tags = []
+        for v in interactions.values(): display_tags.extend(v)
+
+        # 5. 모든 데이터를 담아 반환
         return {
+            "solar_display": dt_raw.strftime("%Y/%m/%d %H:%M"),
+            "corrected_display": dt_true_solar.strftime("%Y/%m/%d %H:%M"),
+            "lunar_display": day_data.get('lunar', "정보 없음"),
+            "lng_diff_str": f"{lng_offset_display}분" if lng_offset_display < 0 else f"+{lng_offset_display}분",
+            "gender_str": "여자" if gender == "F" else "남자",
+            "location_name": location,
+            "display_tags": display_tags[:8],
             "birth": birth_str, 
             "gender": gender, 
             "pillars": pillars, 
@@ -482,11 +516,10 @@ class SajuEngine:
             "power": power, 
             "status": detailed_status,
             "yongsin_detail": yongsin_info,
-            # [NEW 데이터 포함]
             "wealth_analysis": wealth_career,
             "daeun_num": daeun_num, 
             "daeun_list": daeun_list,
-            "current_trace": current_trace,
-            "interactions": interactions, # 11가지 관계 분석 결과 추가
+            "current_trace": current_trace, # 복구된 데이터
+            "interactions": interactions,
             "jasi_type": jasi_type
         }
