@@ -8,6 +8,7 @@ from typing import Optional
 from datetime import datetime, timedelta 
 import traceback
 import os
+import saju_constants as sc
 
 # 엔진 및 브릿지 임포트
 from saju_engine import SajuEngine 
@@ -33,8 +34,12 @@ HAN_MAP = {
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
+    # CITY_DATA의 키값들만 뽑아서 리스트로 만듭니다.
+    city_list = list(sc.CITY_DATA.keys())
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "cities": city_list  # [추가] 도시 목록 전달
+    })
 @app.post("/analyze_web", response_class=HTMLResponse)
 async def analyze_web(
     request: Request,

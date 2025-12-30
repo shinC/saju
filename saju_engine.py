@@ -415,25 +415,30 @@ class SajuEngine:
 
     def analyze(self, birth_str, gender, location, use_yajas_i):
         """
-        메인 분석 오케스트레이터 (v2.3 최종 통합본)
-        - 음력 날짜 포맷팅 로직을 강화하여 스크린샷과 동일한 형식을 보장합니다.
+        메인 분석 오케스트레이터 (v2.4 전국 시·군 정밀 보정 버전)
+        - sc.CITY_DATA의 전체 키값과 1:1 매칭하여 정밀한 지역 보정을 수행합니다.
         """
-        # 1. 입력 시각 파싱 및 지역 보정
+        # 1. 입력 시각 파싱
         dt_raw = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
-        city_key = location[:2]
-        target_lng = sc.CITY_DATA.get(city_key, 126.97)
         
+        # 2. 전국 시·군 정밀 경도 매칭 (Exact Match)
+        # 이제 [:2]를 하지 않고 사용자가 선택한 전체 명칭(예: "경기도 수원시")을 직접 찾습니다.
+        target_lng = sc.CITY_DATA.get(location, 126.97) # 매칭 실패 시 서울 기본값
+        
+        # [정밀 연산] 실제 물리적 시차 계산 (소수점 유지)
         lng_offset_exact = (target_lng - 135) * 4
+        # [UI용] 화면 표시를 위한 반올림 정수 시차 (-32, -24 등)
         lng_offset_display = int(round(lng_offset_exact))
         
+        # 3. 시간 보정 연산 (역사적 표준시 + 균시차 + 정밀 지역 오프셋)
         hist_offset = self._get_historical_correction(dt_raw)
         dt_ref = dt_raw + timedelta(minutes=hist_offset)
         eot_offset = self._get_equation_of_time(dt_ref)
         
-        # 정밀 태양시 계산
+        # 엔진 연산은 초 단위까지 정확한 dt_true_solar를 사용합니다.
         dt_true_solar = dt_ref + timedelta(minutes=lng_offset_exact + eot_offset)
         
-        # 2. 분석 수행 (야자시/조자시 및 절기 보정)
+        # 4. 분석 수행 (야자시/조자시 및 절기 보정)
         jasi_type = self._get_jasi_type(dt_true_solar)
         fetch_dt = dt_true_solar
         if not use_yajas_i and jasi_type == "YAJAS-I":
@@ -443,23 +448,18 @@ class SajuEngine:
         day_data = self.m_db.get(day_key)
         if not day_data: return {"error": f"Data not found for {day_key}"}
         
-        # --- [음력 데이터 처리 로직 강화] ---
-        ly = day_data.get('ly')
-        lm = day_data.get('lm')
-        ld = day_data.get('ld')
+        # --- [음력 데이터 처리: ly, lm, ld, ls 반영] ---
+        ly, lm, ld = day_data.get('ly'), day_data.get('lm'), day_data.get('ld')
         ls = day_data.get('ls', False) 
-        
-        # 입력받은 원본 시각 추출 (dt_raw 활용)
         birth_time_str = dt_raw.strftime("%H:%M")
         
         if ly and lm and ld:
-            # 날짜 뒤에 시간을 추가 (예: 1981/01/28 14:01)
             lunar_display = f"{ly}/{lm:02d}/{ld:02d} {birth_time_str}"
             lunar_type = "윤" if ls else "평"
         else:
             lunar_display = "정보 없음"
             lunar_type = "평"
-        # ----------------------------------
+        # ----------------------------------------------
 
         yG, mG, dG = day_data['yG'], day_data['mG'], day_data['dG']
         yG, mG = self._apply_solar_correction(dt_raw, yG, mG)
@@ -467,6 +467,7 @@ class SajuEngine:
         me = dG[0]
         me_hj_hanja = sc.E_MAP_HJ.get(me)
         
+        # 시주(時柱) 연산
         h_idx = ((dt_true_solar.hour * 60 + dt_true_solar.minute + 60) // 120) % 12
         target_dG_for_hour = dG
         if use_yajas_i and jasi_type == "YAJAS-I":
@@ -479,7 +480,7 @@ class SajuEngine:
         
         palja = [yG[0], yG[1], mG[0], mG[1], dG[0], dG[1], hG[0], hG[1]]
         
-        # 3. 각종 분석 (신강약, 용신, 신살, 대운 등)
+        # 5. 각종 분석 수행
         scores, power = self._calculate_power(palja, me_hj_hanja)
         detailed_status = self._get_detailed_status(power)
         yongsin_info = self._get_yongsin_info(palja, power, me_hj_hanja)
@@ -493,7 +494,7 @@ class SajuEngine:
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
         daeun_list = self._calculate_daeun_scores(daeun_list, yongsin_info, palja)
         
-        # 4. 현재 운의 흐름 (current_trace)
+        # 6. 현재 운의 흐름 (current_trace)
         now = datetime.now()
         current_age = now.year - dt_raw.year + 1
         current_trace = {
@@ -511,14 +512,15 @@ class SajuEngine:
         display_tags = []
         for v in interactions.values(): display_tags.extend(v)
 
-        # 5. 모든 데이터를 담아 반환
+        # 7. 최종 데이터 반환
         return {
             "solar_display": dt_raw.strftime("%Y/%m/%d %H:%M"),
             "corrected_display": dt_true_solar.strftime("%Y/%m/%d %H:%M"),
-            "lunar_display": lunar_display, # 가공된 음력 날짜 반환
+            "lunar_display": lunar_display,
+            "lunar_type": lunar_type,
             "lng_diff_str": f"{lng_offset_display}분" if lng_offset_display < 0 else f"+{lng_offset_display}분",
             "gender_str": "여자" if gender == "F" else "남자",
-            "location_name": location,
+            "location_name": location, # 사용자가 선택한 전체 지역명 그대로 반환
             "display_tags": display_tags[:8],
             "birth": birth_str, 
             "gender": gender, 
