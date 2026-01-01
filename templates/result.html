@@ -10,12 +10,12 @@
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #f5f5f5; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* 오행 컬러 클래스 - 이미지의 색감과 더 가깝게 조정 */
-        .text-목 { color: #2d5a27; } .bg-목 { background-color: #2d5a27; } /* 진한 초록 */
-        .text-화 { color: #c53030; } .bg-화 { background-color: #c53030; } /* 빨강 */
-        .text-토 { color: #a67c00; } .bg-토 { background-color: #a67c00; } /* 황토색 */
-        .text-금 { color: #718096; } .bg-금 { background-color: #718096; } /* 회색 */
-        .text-수 { color: #1a202c; } .bg-수 { background-color: #1a202c; } /* 검정 */
+        /* 오행 컬러 클래스 - 초록색(목)의 채도를 높여 회색(금)과 구분력 강화 */
+        .text-목 { color: #00a86b; } .bg-목 { background-color: #00a86b; } /* 선명한 에메랄드 그린 */
+        .text-화 { color: #e53e3e; } .bg-화 { background-color: #e53e3e; } /* 선명한 빨강 */
+        .text-토 { color: #b7791f; } .bg-토 { background-color: #b7791f; } /* 깊이 있는 황토색 */
+        .text-금 { color: #718096; } .bg-금 { background-color: #718096; } /* 차분한 블루그레이(회색) */
+        .text-수 { color: #1a202c; } .bg-수 { background-color: #1a202c; } /* 진한 검정 */
         
         /* 테이블 전용 스타일 */
         .saju-table th, .saju-table td { border: 1px solid #e2e8f0; padding: 8px 4px; text-align: center; }
@@ -65,7 +65,7 @@
                                 <span class="text-2xl">{{ p.gan }}</span>
                                 <span class="text-[10px] ml-0.5 opacity-70">{{ p.gan_kor }}</span>
                             </div>
-                            <span class="text-[9px] mt-1">{{ p.gan_pol }}{{ p.gan_elem }}</span>
+                            <span class="text-[9px] mt-1 font-bold">{{ p.gan_pol }}{{ p.gan_elem }}</span>
                         </div>
                     </td>
                     {% endfor %}
@@ -73,7 +73,10 @@
                 <tr class="text-[11px]">
                     <td class="label-col">십성</td>
                     {% for i in [3, 2, 1, 0] %}
-                    <td class="text-blue-500 font-medium">{{ '비견(본인)' if i == 2 else result.pillars[i].t_gan }}</td>
+                    {% set p = result.pillars[i] %}
+                    <td class="text-{{ p.gan_elem }} font-bold">
+                        {{ '비견(본인)' if i == 2 else p.t_gan }}
+                    </td>
                     {% endfor %}
                 </tr>
 
@@ -87,7 +90,7 @@
                                 <span class="text-2xl">{{ p.ji }}</span>
                                 <span class="text-[10px] ml-0.5 opacity-70">{{ p.ji_kor }}</span>
                             </div>
-                            <span class="text-[9px] mt-1">{{ p.ji_pol }}{{ p.ji_elem }}</span>
+                            <span class="text-[9px] mt-1 font-bold">{{ p.ji_pol }}{{ p.ji_elem }}</span>
                         </div>
                     </td>
                     {% endfor %}
@@ -95,8 +98,9 @@
                 <tr class="text-[11px]">
                     <td class="label-col">십성</td>
                     {% for i in [3, 2, 1, 0] %}
-                    <td class="{{ 'text-red-500 font-bold' if i == 2 else 'text-gray-600' }}">
-                        {{ result.pillars[i].t_ji }}
+                    {% set p = result.pillars[i] %}
+                    <td class="text-{{ p.ji_elem }} font-bold">
+                        {{ p.t_ji }}
                     </td>
                     {% endfor %}
                 </tr>
@@ -139,7 +143,7 @@
             {% for d in result.daeun_list %}
             <div class="flex-shrink-0 w-14 text-center">
                 <div class="text-[10px] text-gray-400 mb-1">{{ d.start_age }}세</div>
-                <div class="rounded-xl border {{ 'border-blue-500 ring-1 ring-blue-500' if result.current_trace.daeun.start_age == d.start_age else 'border-gray-200' }} overflow-hidden">
+                <div class="rounded-xl border {{ 'border-blue-500 ring-1 ring-blue-500' if result.current_trace.daeun.start_age == d.start_age else 'border-gray-200' }} overflow-hidden shadow-sm">
                     <div class="py-2 bg-gray-50 text-xs font-bold border-b">{{ d.ganzi[0] }}</div>
                     <div class="py-2 bg-white text-xs font-bold">{{ d.ganzi[1] }}</div>
                 </div>
