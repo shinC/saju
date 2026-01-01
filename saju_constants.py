@@ -207,3 +207,62 @@ INTERACTION_SCORES = {
 
 # --- 5. 디폴트 값 ---
 DEFAULT_LNG = 126.97
+
+# 1. 2글자 조합 관계 (Pairwise)
+# (결과 키값, 매핑 딕셔너리, 대상 타입['stem' 또는 'branch'])
+PAIRWISE_RULES = [
+    ("천간합", STEM_HAB, "stem"),
+    ("천간충", STEM_CHUNG, "stem"),
+    ("지지육합", B_HAB_6, "branch"),
+    ("지지충", B_CHUNG, "branch"),
+    ("형", B_HYUNG, "branch"),
+    ("파", B_PA, "branch"),
+    ("해", B_HAE, "branch"),
+    ("원진", B_WONJIN, "branch")
+]
+
+# 2. 결과 딕셔너리 초기화용 키 리스트
+INTERACTION_KEYS = [
+    "천간합", "천간충", "지지육합", "지지삼합", 
+    "지지방합", "지지충", "형", "파", "해", "원진", "공망"
+]
+
+# 3. 위치 명칭 (공망 표시용)
+POSITIONS = ["년지", "월지", "일지", "시지"]
+
+
+# saju_constants.py (추가 및 수정)
+
+# 1. 일간(나) 기준 매핑 규칙 (Me-based)
+# (매핑 딕셔너리, 신살 명칭, 값의 타입)
+ME_MAPPING_RULES = [
+    (YANGIN_MAP, "양인살", "single"),
+    (TAEGEUK_MAP, "태극귀인", "list"),
+    (HAKGWAN_MAP, "관귀학관", "single"),
+    (HONGYEOM_MAP, "홍염살", "single"),
+    (JEONGROK_MAP, "정록(록신)", "single"),
+    (CHEONEUL_MAP, "천을귀인", "list")
+]
+
+# 2. 일지(Day Ji) 기준 매핑 규칙 (DayJi-based)
+# 귀문관살 같은 관계를 처리합니다.
+DAY_JI_MAPPING_RULES = [
+    (GWIMUN_MAP, "귀문관살", "single")
+]
+
+# 3. 공망 위치 명칭
+POSITIONS = ["년지", "월지", "일지", "시지"]
+
+# 4. 간지 조합 및 개별 글자 규칙
+PILLAR_SINSAL_RULES = [
+    (["戊戌", "庚戌", "庚辰", "壬辰", "壬戌"], "괴강살"),
+    (BAEKHO_LIST, "백호대살")
+]
+CHAR_SINSAL_RULES = [
+    (HYEONCHIM_CHARS, "현침살")
+]
+
+
+POWER_WEIGHT_MAP = [
+    (0, 11), (1, 11), (2, 11), (3, 30), (5, 15), (6, 11), (7, 11)
+]
