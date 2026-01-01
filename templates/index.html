@@ -25,6 +25,12 @@
     </style>
 </head>
 <body class="flex flex-col items-center p-4">
+    {% if error %}
+<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+    <strong class="font-bold">에러 발생:</strong>
+    <span class="block sm:inline">{{ error }}</span>
+</div>
+{% endif %}
 
     <form id="sajuForm" action="/analyze_web" method="POST" class="w-full max-w-md bg-white rounded-[32px] shadow-sm p-7 space-y-8 mt-4">
         <h1 class="text-center font-bold text-[20px] mb-2">포스텔러 만세력 2.2 🌟</h1>
