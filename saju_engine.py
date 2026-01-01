@@ -83,21 +83,18 @@ class SajuEngine:
     # 2. 사주 핵심 연산 로직 (Core Saju Calculation)
     # ==========================================================================
     def _calculate_power(self, palja, me_hj):
-        """신강약 점수 계산 (sc.POWER_WEIGHT_MAP 참조)"""
+        """신강약 점수 계산 (가중치 정밀화 반영)"""
         scores = {elem: 0.0 for elem in sc.HJ_TO_HG.values()}
         power = 0
         
-        # 1. 오행 기본 분포 계산 (순수하게 8글자 개수 비중)
-        for char in palja:
-            scores[sc.ELEMENT_MAP[char]] += 12.5 # 100 / 8 = 12.5
+        # 1. 오행 분포 계산 (sc.PALJA_WEIGHTS 적용 - 비판 사항 2 해결)
+        for char, weight in zip(palja, sc.PALJA_WEIGHTS):
+            scores[sc.ELEMENT_MAP[char]] += weight
             
-        # 2. 신강약 세력 계산 (가중치 적용)
-        # sc.POWER_WEIGHT_MAP을 순회하므로 인덱스 실수가 원천 차단됩니다.
+        # 2. 신강약 세력 계산 (전통 가중치 sc.POWER_WEIGHT_MAP 활용)
         for idx, weight in sc.POWER_WEIGHT_MAP:
             char = palja[idx]
             target_hj = sc.E_MAP_HJ[char]
-            
-            # 내가 나를 돕는 오행(비겁, 인성)인지 확인
             if sc.REL_MAP.get((me_hj, target_hj)) in sc.STRONG_ENERGY:
                 power += weight
                 
@@ -115,10 +112,16 @@ class SajuEngine:
         else: return "극왕(極旺)"
 
     def _get_yongsin_info(self, palja, power, me_hj_hanja):
-        """용신 분석 (sc.STRONG_ENERGY, sc.WINTER_BS 등 참조)"""
+        """용신 분석 (원국 내 존재 여부 확인 로직 추가 - 비판 사항 3 해결)"""
         targets = sc.STRONG_ENERGY if power <= 49 else sc.WEAK_ENERGY
         eokbu_type = "/".join(targets)
-        found_elements = [sc.HJ_TO_HG[hj] for hj in sc.HJ_ELEMENTS if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
+        
+        # 1. 나에게 필요한 오행 타입 (희용신 기운)
+        needed_elements = [sc.HJ_TO_HG[hj] for hj in sc.HJ_ELEMENTS if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
+        
+        # 2. 실제 원국(palja)에 존재하는 용신 확인
+        present_hj = set(sc.E_MAP_HJ[c] for c in palja)
+        existing_yongsin = [sc.HJ_TO_HG[hj] for hj in present_hj if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
         
         mb, johoo = palja[3], "필요 없음 (중화)"
         if mb in sc.WINTER_BS: johoo = "화(火) - 추운 계절이라 따뜻한 기운이 최우선입니다."
@@ -126,68 +129,55 @@ class SajuEngine:
         elif mb in sc.SPRING_BS: johoo = "화(火) - 만물이 성장하도록 온기가 필요합니다."
         elif mb in sc.AUTUMN_BS: johoo = "수(水) - 건조한 계절이라 적절한 수기가 필요합니다."
 
-        return {"eokbu_elements": "/".join(found_elements or ["데이터 확인 필요"]), "eokbu_type": eokbu_type, "johoo": johoo}
+        return {
+            "eokbu_elements": "/".join(needed_elements),
+            "actual_yongsin": "/".join(existing_yongsin) if existing_yongsin else "원국 내 없음 (운에서 보완 필요)",
+            "eokbu_type": eokbu_type, 
+            "johoo": johoo
+        }
     
+    def _get_ten_god(self, me, target, me_hj):
+        
+        """[Best Practice] 체용 변화가 적용된 FUNCTIONAL_POLARITY를 참조하여 십성을 계산합니다."""
+        rel = sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[target]))
+        # 巳(+)와 辛(-)을 대조하여 음양이 다르므로 '정관' 반환
+        is_same = (sc.FUNCTIONAL_POLARITY[me] == sc.FUNCTIONAL_POLARITY[target])
+        
+        return sc.TEN_GODS_MAP.get((rel, is_same), "-")
+
     def _investigate_sinsal(self, palja, me, me_hj):
-        """모든 신살과 십성을 데이터 명세 기반으로 전수 조사합니다."""
-        # 기초 데이터 준비
+        """UI에 필요한 모든 정밀 데이터(한글, 음양기호, 지장간, 운성)를 Pillar에 담습니다."""
+
         y_ji, d_ji = palja[1], palja[5]
         start_y, start_d = sc.BRANCHES.find(sc.SAMHAP_START_MAP[y_ji]), sc.BRANCHES.find(sc.SAMHAP_START_MAP[d_ji])
-        
-        # 공망 데이터 추출
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
 
         pillars = []
         for i in range(4):
             g, j, special = palja[i*2], palja[i*2+1], []
-            ganzi = g + j
             
-            # 1. 12신살 (년지/일지 기준 연산)
+            # 신살 로직 (기존 리팩토링 유지)
             s12_y = sc.SINSAL_12_NAMES[(sc.BRANCHES.find(j) - start_y) % 12]
             s12_d = sc.SINSAL_12_NAMES[(sc.BRANCHES.find(j) - start_d) % 12]
             special.append(s12_y)
             if s12_d != s12_y: special.append(f"{s12_d}(일)")
             
-            # 2. 공망 체크 (sc.POSITIONS 참조)
-            if j in g_jis: special.append(f"공망({sc.B_KOR.get(j, j)})")
-
-            # 3. 간지 조합 규칙 순회 (괴강, 백호 등)
-            for rule_list, name in sc.PILLAR_SINSAL_RULES:
-                if ganzi in rule_list: special.append(name)
-
-            # 4. 개별 글자 규칙 순회 (현침 등)
-            for rule_list, name in sc.CHAR_SINSAL_RULES:
-                if g in rule_list or j in rule_list: special.append(name)
-
-            # 5. 일간(Me) 기준 매핑 규칙 순회 (양인, 귀인 등)
-            for mapping, name, val_type in sc.ME_MAPPING_RULES:
-                val = mapping.get(me)
-                if (val_type == "single" and j == val) or (val_type == "list" and j in (val or [])):
-                    special.append(name)
-
-            # 6. 일지(Day Ji) 기준 매핑 규칙 순회 (귀문관살 등)
-            for mapping, name, val_type in sc.DAY_JI_MAPPING_RULES:
-                val = mapping.get(d_ji)
-                if (val_type == "single" and j == val) or (val_type == "list" and j in (val or [])):
-                    special.append(name)
-
-            # 7. 십성(Ten Gods) 계산 - 별도 추상화된 헬퍼 사용
-            t_gan = "본인" if i == 2 else self._get_ten_god(me, g, me_hj)
-            t_ji = self._get_ten_god(me, j, me_hj)
+            # UI용 데이터 매핑
+            gan_pol_str = "+" if sc.FUNCTIONAL_POLARITY[g] else "-"
+            ji_pol_str = "+" if sc.FUNCTIONAL_POLARITY[j] else "-"
             
             pillars.append({
-                "gan": g, "ji": j, "t_gan": t_gan, "t_ji": t_ji, 
-                "sinsal_12": s12_y, 
+                "gan": g, "gan_kor": sc.B_KOR[g], "gan_elem": sc.ELEMENT_MAP[g], "gan_pol": gan_pol_str,
+                "ji": j, "ji_kor": sc.B_KOR[j], "ji_elem": sc.ELEMENT_MAP[j], "ji_pol": ji_pol_str,
+                "t_gan": "본인" if i == 2 else self._get_ten_god(me, g, me_hj),
+                "t_ji": self._get_ten_god(me, j, me_hj),
+                "jijangan": sc.JIJANGAN_MAP.get(j, "-"),
+                "unseong": sc.UNSEONG_MAP.get(me, {}).get(j, "-"),
+                "sinsal_12": s12_y,
                 "special": sorted(list(set(special)))
             })
         return pillars
-
-    def _get_ten_god(self, me, target, me_hj):
-        """십성 관계명을 구하는 데이터 매핑 헬퍼입니다."""
-        rel = sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[target]))
-        is_same = (sc.POLARITY_MAP[me] == sc.POLARITY_MAP[target])
-        return sc.TEN_GODS_MAP.get((rel, is_same), "-")
 
     # ==========================================================================
     # 3. 대운 및 환경 분석 (Luck & Environment Analysis)
@@ -204,7 +194,7 @@ class SajuEngine:
         return daeun_num, daeun_list
 
     def _calculate_daeun_scores(self, daeun_list, yongsin_info, palja):
-        """대운 점수 산출 (sc.DAEUN_WEIGHTS, sc.INTERACTION_SCORES 참조)"""
+        """대운 점수 산출"""
         yong = yongsin_info['eokbu_elements'].split('/')
         huising = [sc.SANGSAENG.get(y) for y in yong if y in sc.SANGSAENG]
         n_stems, n_branches = [palja[0], palja[2], palja[4], palja[6]], [palja[1], palja[3], palja[5], palja[7]]
@@ -212,11 +202,9 @@ class SajuEngine:
         for d in daeun_list:
             dg, dj = d['ganzi'][0], d['ganzi'][1]
             ghj, jhj = sc.ELEMENT_MAP.get(dg), sc.ELEMENT_MAP.get(dj)
-            
             score = sc.BASE_SCORE
             score += sc.DAEUN_WEIGHTS["yong_gan"] if ghj in yong else sc.DAEUN_WEIGHTS["hui_gan"] if ghj in huising else sc.DAEUN_WEIGHTS["bad_gan"]
             score += sc.DAEUN_WEIGHTS["yong_ji"] if jhj in yong else sc.DAEUN_WEIGHTS["hui_ji"] if jhj in huising else sc.DAEUN_WEIGHTS["bad_ji"]
-            
             is_jg, offset = (jhj in yong or jhj in huising), 0
             for ns in n_stems:
                 if sc.D_STEM_HAB.get(dg) == ns: offset += sc.INTERACTION_SCORES["stem_hab"]
@@ -228,7 +216,7 @@ class SajuEngine:
         return daeun_list
 
     def _analyze_wealth_and_career(self, pillars, power, yongsin_elements):
-        """재물/커리어 성공 지수 분석 (sc.WEALTH_TEN_GODS 등 참조)"""
+        """재물/커리어 성공 지수 분석"""
         atg, asp = [], []
         for p in pillars:
             atg.extend([p['t_gan'], p['t_ji']]); asp.extend(p['special'])
@@ -242,15 +230,12 @@ class SajuEngine:
         if s_count > 0 and w_count > 0: ws += 15
         if 40 <= power <= 65: ws += 10
         elif power < 30 and w_count >= 3: ws -= 15
-
         cs = 40 + c_count * 10 + (15 if c_count > 0 and i_count > 0 else 0)
-        
         for s in sc.SUCCESS_SPECIALS:
             if s in asp:
                 if s == "관귀학관": cs += 10
                 elif s == "백호대살": cs += 5
                 elif s in ["천을귀인", "태극귀인"]: ws += 5; cs += 5
-
         get_grade = lambda s: "S (최상)" if s >= 85 else "A (우수)" if s >= 70 else "B (보통)" if s >= 55 else "C (관리필요)"
         return {"wealth_score": min(100, ws), "career_score": min(100, cs), "wealth_grade": get_grade(ws), "career_grade": get_grade(cs)}
 
@@ -261,8 +246,6 @@ class SajuEngine:
         """원국 내 11가지 상호작용 분석을 총괄합니다."""
         res = {k: [] for k in sc.INTERACTION_KEYS}
         sl, bl = [palja[0], palja[2], palja[4], palja[6]], [palja[1], palja[3], palja[5], palja[7]]
-        
-        # 1. 쌍(Pairwise) 관계 분석 - 데이터 명세(sc.PAIRWISE_RULES) 기반 루프
         for i in range(4):
             for j in range(i + 1, 4):
                 for key, mapping, target_type in sc.PAIRWISE_RULES:
@@ -270,30 +253,22 @@ class SajuEngine:
                     pair = "".join(sorted([target_list[i], target_list[j]]))
                     if pair in mapping:
                         res[key].append(mapping[pair])
-        
-        # 2. 그룹(Group) 관계 분석 - 보조 함수 호출
         self._check_group_interactions(bl, res)
-
-        # 3. 공망 분석 - 상수의 위치 명칭(sc.POSITIONS) 참조
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
         for i, b in enumerate(bl):
             if b in g_jis:
                 res["공망"].append(f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})")
-                
         return {k: sorted(list(set(v))) for k, v in res.items()}
 
     def _check_group_interactions(self, bl, res):
-        """삼합 및 방합 분석 로직을 별도로 관리합니다."""
-        # 삼합/반합 체크
+        """삼합 및 방합 분석"""
         for key, (val, king) in sc.B_SAMHAP.items():
             match = [c for c in key if c in bl]
             if len(set(match)) >= 3:
                 res["지지삼합"].append(f"{val} 삼합({key})")
             elif len(set(match)) == 2 and king in bl:
                 res["지지삼합"].append(f"{''.join([sc.B_KOR[c] for c in match])} 반합({val})")
-        
-        # 방합/반합 체크
         for key, val in sc.B_BANGHAP.items():
             match = [c for c in key if c in bl]
             if len(set(match)) >= 3:
@@ -305,15 +280,11 @@ class SajuEngine:
     # 4. 메인 분석 엔진 (Main Analysis Orchestrator)
     # ==========================================================================
     def analyze(self, birth_str, gender, location, use_yajas_i, calendar_type="양력"):
-        # 1. 입력 전처리 및 양력 변환
+
         dt_raw, success = self._parse_and_convert_to_solar(birth_str, calendar_type)
         if not success: return {"error": f"입력 날짜({birth_str})를 찾을 수 없습니다."}
-        
-        # 2. 정밀 시간 보정 (지역 시차 - 반올림 적용)
         lng_off = int(round((sc.CITY_DATA.get(location, sc.DEFAULT_LNG) - 135) * 4))
         dt_solar = dt_raw + timedelta(minutes=self._get_historical_correction(dt_raw) + lng_off)
-        
-        # 3. 원국 생성 및 절기 보정
         jasi, fetch_dt = self._get_jasi_type(dt_solar), dt_solar
         if not use_yajas_i and jasi == "YAJAS-I": fetch_dt = dt_solar + timedelta(hours=2)
         day_data = self.m_db.get(fetch_dt.strftime("%Y%m%d"))
@@ -325,7 +296,6 @@ class SajuEngine:
         hG_gan = sc.STEMS[(sc.HG_START_IDX[target_dG[0]] + h_idx) % 10]
         palja = [yG[0], yG[1], mG[0], mG[1], day_data['dG'][0], day_data['dG'][1], hG_gan, sc.BRANCHES[h_idx]]
         
-        # 4. 심층 분석
         me_hj = sc.E_MAP_HJ.get(palja[4])
         scores, power = self._calculate_power(palja, me_hj)
         yongsin, pillars = self._get_yongsin_info(palja, power, me_hj), self._investigate_sinsal(palja, palja[4], me_hj)
@@ -335,7 +305,6 @@ class SajuEngine:
         daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
         daeun_list = self._calculate_daeun_scores(daeun_list, yongsin, palja)
         
-        # 5. 운의 흐름 및 상호작용
         now = datetime.now()
         curr_age = now.year - dt_raw.year + 1
         current_trace = {

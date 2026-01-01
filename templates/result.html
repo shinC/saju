@@ -10,12 +10,16 @@
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #f5f5f5; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* 오행 컬러 클래스 */
-        .text-목 { color: #50808e; } .bg-목 { background-color: #50808e; }
-        .text-화 { color: #e16a6a; } .bg-화 { background-color: #e16a6a; }
-        .text-토 { color: #e9c46a; } .bg-토 { background-color: #e9c46a; }
-        .text-금 { color: #9a9a9a; } .bg-금 { background-color: #9a9a9a; }
-        .text-수 { color: #333333; } .bg-수 { background-color: #333333; }
+        /* 오행 컬러 클래스 - 이미지의 색감과 더 가깝게 조정 */
+        .text-목 { color: #2d5a27; } .bg-목 { background-color: #2d5a27; } /* 진한 초록 */
+        .text-화 { color: #c53030; } .bg-화 { background-color: #c53030; } /* 빨강 */
+        .text-토 { color: #a67c00; } .bg-토 { background-color: #a67c00; } /* 황토색 */
+        .text-금 { color: #718096; } .bg-금 { background-color: #718096; } /* 회색 */
+        .text-수 { color: #1a202c; } .bg-수 { background-color: #1a202c; } /* 검정 */
+        
+        /* 테이블 전용 스타일 */
+        .saju-table th, .saju-table td { border: 1px solid #e2e8f0; padding: 8px 4px; text-align: center; }
+        .label-col { background-color: #f8fafc; font-weight: bold; font-size: 11px; color: #64748b; width: 60px; }
     </style>
 </head>
 <body class="max-w-md mx-auto bg-white min-h-screen pb-20 shadow-xl">
@@ -25,86 +29,135 @@
         <div>
             <h1 class="text-xl font-bold text-gray-800">{{ result.name }}님</h1>
             <p class="text-sm font-medium text-gray-500">
-                {{ ilju_info.title }} ({{ result.ilju }})
+                {{ result.ilju }} 일주
             </p>
         </div>
     </header>
 
-    <div class="px-6 py-4 bg-gray-50 text-[12px] text-gray-400 leading-relaxed border-b">
-        <p>양 {{ result.solar_display }} {{ result.gender_str }} {{ result.location_name }}</p>
-       <p class="text-blue-400">
-            음({{ result.lunar_type | default('평') }}달) 
-            {{ result.lunar_display | default('정보없음') }} 
-            {{ result.gender_str }} 
-            {{ result.location_name }}
-        </p>
-        <p class="text-black font-bold">
-            <span class="text-red-400 font-bold">양</span> {{ result.corrected_display }} {{ result.gender_str }} {{ result.location }} 
-            <span class="text-red-400">(지역시 {{ result.lng_diff_str }})</span>
+    <div class="px-6 py-4 bg-gray-50 text-[11px] text-gray-400 leading-relaxed border-b">
+        <p>양 {{ result.solar_display }} {{ result.gender_str }}</p>
+        <p class="text-blue-400">음({{ result.lunar_type }}달) {{ result.lunar_display }}</p>
+        <p class="text-black font-medium">
+            <span class="text-red-400 font-bold">실제 태양시</span> {{ result.corrected_display }} 
+            <span class="text-red-400">({{ result.location_name }} {{ result.lng_diff_str }})</span>
         </p>
     </div>
 
-    <section class="p-5">
-        <div class="grid grid-cols-4 gap-2 text-center">
-            {% for p_name in ['생시', '생일', '생월', '생년'] %}
-            <div class="text-[11px] text-gray-400">{{ p_name }}</div>
-            {% endfor %}
-            
-            {% for p in result.pillars|reverse %}
-            <div class="bg-white border border-gray-100 rounded-2xl p-3 shadow-sm space-y-2">
-                <div class="text-[10px] text-gray-400">{{ p.t_gan }}</div>
-                <div class="text-2xl font-bold text-{{ p.gan_elem }}">
-                    {{ p.gan }}<span class="text-xs font-light text-gray-400 ml-0.5">{{ h[p.gan] }}</span>
-                </div>
-                <div class="text-2xl font-bold text-{{ p.ji_elem }}">
-                    {{ p.ji }}<span class="text-xs font-light text-gray-400 ml-0.5">{{ h[p.ji] }}</span>
-                </div>
-                <div class="text-[10px] text-gray-400">{{ p.t_ji }}</div>
-            </div>
-            {% endfor %}
-        </div>
+    <section class="p-4">
+        <table class="w-full saju-table table-fixed border-collapse rounded-lg overflow-hidden shadow-sm">
+            <thead>
+                <tr class="bg-gray-50 text-[10px] text-gray-500">
+                    <th class="label-col">구분</th>
+                    <th>생시</th>
+                    <th>생일</th>
+                    <th>생월</th>
+                    <th>생년</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="text-[15px] font-bold">
+                    <td class="label-col">천간</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    {% set p = result.pillars[i] %}
+                    <td class="text-{{ p.gan_elem }}">
+                        <div class="flex flex-col items-center">
+                            <div class="flex items-end">
+                                <span class="text-2xl">{{ p.gan }}</span>
+                                <span class="text-[10px] ml-0.5 opacity-70">{{ p.gan_kor }}</span>
+                            </div>
+                            <span class="text-[9px] mt-1">{{ p.gan_pol }}{{ p.gan_elem }}</span>
+                        </div>
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr class="text-[11px]">
+                    <td class="label-col">십성</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td class="text-blue-500 font-medium">{{ '비견(본인)' if i == 2 else result.pillars[i].t_gan }}</td>
+                    {% endfor %}
+                </tr>
+
+                <tr class="text-[15px] font-bold border-t-2">
+                    <td class="label-col">지지</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    {% set p = result.pillars[i] %}
+                    <td class="text-{{ p.ji_elem }}">
+                        <div class="flex flex-col items-center">
+                            <div class="flex items-end">
+                                <span class="text-2xl">{{ p.ji }}</span>
+                                <span class="text-[10px] ml-0.5 opacity-70">{{ p.ji_kor }}</span>
+                            </div>
+                            <span class="text-[9px] mt-1">{{ p.ji_pol }}{{ p.ji_elem }}</span>
+                        </div>
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr class="text-[11px]">
+                    <td class="label-col">십성</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td class="{{ 'text-red-500 font-bold' if i == 2 else 'text-gray-600' }}">
+                        {{ result.pillars[i].t_ji }}
+                    </td>
+                    {% endfor %}
+                </tr>
+
+                <tr class="text-[10px] text-gray-500">
+                    <td class="label-col">지장간</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td>{{ result.pillars[i].jijangan | default('-') }}</td>
+                    {% endfor %}
+                </tr>
+                <tr class="text-[10px] text-gray-500">
+                    <td class="label-col">12운성</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td>{{ result.pillars[i].unseong | default('-') }}</td>
+                    {% endfor %}
+                </tr>
+                <tr class="text-[10px] text-gray-500">
+                    <td class="label-col">12신살</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td>{{ result.pillars[i].sinsal_12 }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
     </section>
 
-    <section class="px-5">
-        <div class="bg-[#4d4d4d] text-white p-3 rounded-t-2xl flex justify-between items-center text-xs">
-            <span class="font-bold">사주 분석 태그</span>
-            <span>▲</span>
-        </div>
-        <div class="border border-t-0 p-4 rounded-b-2xl bg-gray-50/50">
-            <div class="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                {% for tag in result.display_tags %}
-                <span class="px-3 py-1 bg-white border border-gray-200 rounded-full text-[11px] whitespace-nowrap">{{ tag }}</span>
-                {% endfor %}
-            </div>
-        </div>
-    </section>
-
-    <section class="p-6 mt-4">
-        <h2 class="text-lg font-bold mb-4">신강/신약 분석</h2>
-        <div class="bg-gray-50 p-6 rounded-[28px] border border-gray-100">
-            <p class="text-sm text-gray-600 mb-4">
-                {{ result.name }}님은 <span class="font-bold text-black">{{ result.status }}</span> 사주입니다.
-            </p>
-            <div class="relative h-2 bg-gray-200 rounded-full mt-8">
-                <div class="absolute -top-7 left-0 text-[10px] text-gray-400">에너지 지수: {{ result.power }}</div>
-                <div class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
-                     style="left: {{ result.power }}%;"></div>
-            </div>
+    <section class="px-5 mt-2">
+        <div class="flex gap-2 overflow-x-auto no-scrollbar py-1">
+            {% for tag in result.display_tags %}
+            <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-[10px] whitespace-nowrap">#{{ tag }}</span>
+            {% endfor %}
         </div>
     </section>
 
     <section class="p-6">
-        <h2 class="text-lg font-bold mb-4">대운 (대운수: {{ result.daeun_num }})</h2>
-        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-4">
+        <h2 class="text-lg font-bold mb-4 flex justify-between items-center">
+            <span>대운 <span class="text-sm font-normal text-gray-400 ml-2">대운수 {{ result.daeun_num }}</span></span>
+        </h2>
+        <div class="flex gap-3 overflow-x-auto no-scrollbar pb-4">
             {% for d in result.daeun_list %}
-            <div class="flex-shrink-0 w-16 text-center space-y-1">
-                <div class="text-[10px] text-gray-400">{{ d.start_age }}세</div>
-                <div class="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                    <div class="py-2 bg-gray-50 text-sm font-bold border-b">{{ d.ganzi[0] }}</div>
-                    <div class="py-2 bg-white text-sm font-bold">{{ d.ganzi[1] }}</div>
+            <div class="flex-shrink-0 w-14 text-center">
+                <div class="text-[10px] text-gray-400 mb-1">{{ d.start_age }}세</div>
+                <div class="rounded-xl border {{ 'border-blue-500 ring-1 ring-blue-500' if result.current_trace.daeun.start_age == d.start_age else 'border-gray-200' }} overflow-hidden">
+                    <div class="py-2 bg-gray-50 text-xs font-bold border-b">{{ d.ganzi[0] }}</div>
+                    <div class="py-2 bg-white text-xs font-bold">{{ d.ganzi[1] }}</div>
                 </div>
             </div>
             {% endfor %}
+        </div>
+    </section>
+
+    <section class="p-6">
+        <h2 class="text-lg font-bold mb-4">신강/신약 분석</h2>
+        <div class="bg-gray-50 p-6 rounded-[28px] border border-gray-100">
+            <p class="text-sm text-gray-600">
+                {{ result.name }}님은 <span class="font-bold text-black">{{ result.status }}</span> 사주입니다.
+            </p>
+            <div class="relative h-2 bg-gray-200 rounded-full mt-8">
+                <div class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
+                     style="left: {{ result.power }}%;"></div>
+            </div>
         </div>
     </section>
 
