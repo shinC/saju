@@ -243,39 +243,61 @@ class SajuEngine:
     # 상호작용 분석 로직 (Interactions Analysis)
     # ==========================================================================
     def _analyze_interactions(self, palja):
-        """원국 내 11가지 상호작용 분석을 총괄합니다."""
+        """인덱스를 년(0), 월(1), 일(2), 시(3) 순서로 고정하여 화면과 동기화합니다."""
         res = {k: [] for k in sc.INTERACTION_KEYS}
-        sl, bl = [palja[0], palja[2], palja[4], palja[6]], [palja[1], palja[3], palja[5], palja[7]]
+        
+        # [교정] palja[0,2,4,6]은 년, 월, 일, 시 순서입니다. 
+        # 이를 sl, bl에 순서대로 담아 인덱스 0,1,2,3이 각각 년,월,일,시가 되게 합니다.
+        sl = [palja[0], palja[2], palja[4], palja[6]] # 0:년, 1:월, 2:일, 3:시 (천간)
+        bl = [palja[1], palja[3], palja[5], palja[7]] # 0:년, 1:월, 2:일, 3:시 (지지)
+        
         for i in range(4):
             for j in range(i + 1, 4):
                 for key, mapping, target_type in sc.PAIRWISE_RULES:
                     target_list = sl if target_type == "stem" else bl
                     pair = "".join(sorted([target_list[i], target_list[j]]))
                     if pair in mapping:
-                        res[key].append(mapping[pair])
+                        res[key].append({"name": mapping[pair], "subs": [i, j]})
+        
         self._check_group_interactions(bl, res)
+        
+        # 공망 처리 (sc.POSITIONS[0]이 '년지'인 경우)
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
         for i, b in enumerate(bl):
             if b in g_jis:
-                res["공망"].append(f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})")
-        return {k: sorted(list(set(v))) for k, v in res.items()}
+                res["공망"].append({"name": f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})", "subs": [i]})
+
+        # 딕셔너리 중복 제거 및 정렬
+        unique_res = {}
+        for k, v in res.items():
+            seen = set()
+            unique_list = []
+            for item in v:
+                if item["name"] not in seen:
+                    unique_list.append(item)
+                    seen.add(item["name"])
+            unique_res[k] = sorted(unique_list, key=lambda x: x["name"])
+            
+        return unique_res
 
     def _check_group_interactions(self, bl, res):
-        """삼합 및 방합 분석"""
+        """삼합/방합 분석 시에도 0:년 ~ 3:시 인덱스를 그대로 유지합니다."""
         for key, (val, king) in sc.B_SAMHAP.items():
-            match = [c for c in key if c in bl]
-            if len(set(match)) >= 3:
-                res["지지삼합"].append(f"{val} 삼합({key})")
-            elif len(set(match)) == 2 and king in bl:
-                res["지지삼합"].append(f"{''.join([sc.B_KOR[c] for c in match])} 반합({val})")
+            match_indices = [idx for idx, b in enumerate(bl) if b in key]
+            if len(set(match_indices)) >= 3:
+                res["지지삼합"].append({"name": f"{val} 삼합", "subs": match_indices})
+            elif len(set(match_indices)) == 2 and king in bl:
+                chars = "".join([sc.B_KOR.get(bl[idx], bl[idx]) for idx in match_indices])
+                res["지지삼합"].append({"name": f"{chars} 반합({val})", "subs": match_indices})
+        
         for key, val in sc.B_BANGHAP.items():
-            match = [c for c in key if c in bl]
-            if len(set(match)) >= 3:
-                res["지지방합"].append(val)
-            elif len(set(match)) == 2:
-                res["지지방합"].append(f"{''.join([sc.B_KOR[c] for c in match])} 반합")
-
+            match_indices = [idx for idx, b in enumerate(bl) if b in key]
+            if len(set(match_indices)) >= 3:
+                res["지지방합"].append({"name": val, "subs": match_indices})
+            elif len(set(match_indices)) == 2:
+                chars = "".join([sc.B_KOR.get(bl[idx], bl[idx]) for idx in match_indices])
+                res["지지방합"].append({"name": f"{chars} 반합", "subs": match_indices})
     # ==========================================================================
     # 4. 메인 분석 엔진 (Main Analysis Orchestrator)
     # ==========================================================================

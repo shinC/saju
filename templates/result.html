@@ -127,13 +127,58 @@
         </table>
     </section>
 
-    <section class="px-5 mt-2">
+    <!--section class="px-5 mt-2">
         <div class="flex gap-2 overflow-x-auto no-scrollbar py-1">
             {% for tag in result.display_tags %}
             <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-[10px] whitespace-nowrap">#{{ tag }}</span>
             {% endfor %}
         </div>
-    </section>
+    </section -->
+    <section class="p-6 bg-[#f0eee9] rounded-t-[32px] mt-6 min-h-[500px]">
+    <div class="flex justify-between items-center mb-6 cursor-pointer" onclick="toggleDetailedView()">
+        <h2 class="text-lg font-bold text-gray-800">사주 풀이 자세히 보기</h2>
+        <span id="toggle-icon" class="text-gray-500 transition-transform duration-300 transform rotate-180">▲</span>
+    </div>
+
+    <div id="detailed-content" class="transition-all duration-300">
+        <div class="flex flex-wrap gap-2 mb-6">
+            {% set all_keys = ["궁성", "천간합", "지지육합", "지지삼합", "지지방합", "천간충", "지지충", "공망", "형", "파", "해", "원진"] %}
+            {% for key in all_keys %}
+                <button onclick="highlightInteraction('{{ key }}')" 
+                        id="btn-{{ key }}"
+                        class="interaction-btn px-4 py-1.5 bg-white text-gray-700 rounded-full text-[11px] border border-gray-200 shadow-sm transition-all whitespace-nowrap">
+                    {{ key }}
+                </button>
+            {% endfor %}
+        </div>
+
+        <div id="interaction-desc" class="text-sm text-gray-700 mb-6 min-h-[40px] leading-relaxed">
+            카테고리를 선택하여 상세 풀이를 확인하세요.
+        </div>
+
+        <div class="grid grid-cols-4 gap-4 mb-2 text-center h-6">
+            <div id="label-3" class="gungseong-label text-[10px] font-bold text-orange-600 opacity-0 transition-opacity">자녀/미래</div>
+            <div id="label-2" class="gungseong-label text-[10px] font-bold text-orange-600 opacity-0 transition-opacity">나/배우자</div>
+            <div id="label-1" class="gungseong-label text-[10px] font-bold text-orange-600 opacity-0 transition-opacity">부모/사회</div>
+            <div id="label-0" class="gungseong-label text-[10px] font-bold text-orange-600 opacity-0 transition-opacity">조상</div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-4 mb-10">
+            {% for i in [3, 2, 1, 0] %}
+            <div class="flex flex-col gap-4">
+                <div id="gan-{{ i }}" class="saju-box h-14 bg-white rounded-xl flex items-center justify-center text-xl font-bold border border-gray-200 shadow-sm transition-all duration-300">
+                    <span class="mr-1">{{ result.pillars[i].gan_kor }}</span>
+                    <span class="text-lg opacity-80">{{ result.pillars[i].gan }}</span>
+                </div>
+                <div id="ji-{{ i }}" class="saju-box h-14 bg-white rounded-xl flex items-center justify-center text-xl font-bold border border-gray-200 shadow-sm transition-all duration-300">
+                    <span class="mr-1">{{ result.pillars[i].ji_kor }}</span>
+                    <span class="text-lg opacity-80">{{ result.pillars[i].ji }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
 
     <section class="p-6">
         <h2 class="text-lg font-bold mb-4 flex justify-between items-center">
@@ -172,4 +217,78 @@
     </nav>
 
 </body>
+<script>
+    const interactions = {{ result.interactions | tojson }};
+
+    // [추가] 섹션 접고 펴기 기능
+    function toggleDetailedView() {
+        const content = document.getElementById('detailed-content');
+        const icon = document.getElementById('toggle-icon');
+        
+        if (content.style.display === "none") {
+            content.style.display = "block";
+            icon.style.transform = "rotate(180deg)"; // ▲
+        } else {
+            content.style.display = "none";
+            icon.style.transform = "rotate(0deg)";   // ▼
+        }
+    }
+
+    function highlightInteraction(category) {
+        // 1. 초기화 (라벨 포함)
+        document.querySelectorAll('.saju-box').forEach(box => {
+            box.classList.remove('bg-[#ffcc80]', 'border-[#ffa726]', 'scale-105');
+            box.classList.add('bg-white', 'border-gray-200');
+        });
+        document.querySelectorAll('.interaction-btn').forEach(btn => {
+            btn.classList.remove('bg-[#4a453f]', 'text-white');
+            btn.classList.add('bg-white', 'text-gray-700');
+        });
+        document.querySelectorAll('.gungseong-label').forEach(label => {
+            label.classList.add('opacity-0');
+        });
+
+        // 2. 버튼 활성화
+        const activeBtn = document.getElementById(`btn-${category}`);
+        if (activeBtn) activeBtn.classList.add('bg-[#4a453f]', 'text-white');
+
+        const descBox = document.getElementById('interaction-desc');
+
+        // 3. 궁성(Palace) 클릭 시 라벨 노출
+        if (category === "궁성") {
+            descBox.innerHTML = "각 자리는 <b>년(조상), 월(부모/사회), 일(나/배우자), 시(자녀/미래)</b>를 상징합니다.";
+            document.querySelectorAll('.gungseong-label').forEach(label => {
+                label.classList.remove('opacity-0');
+            });
+            // 모든 글자 박스 살짝 강조
+            document.querySelectorAll('.saju-box').forEach(box => {
+                box.classList.add('bg-[#fff8e1]', 'border-gray-300');
+            });
+            return;
+        }
+
+        // 4. 나머지 관계 매칭 및 강조
+        const items = interactions[category] || [];
+        if (items.length > 0) {
+            let descText = "";
+            items.forEach((item, index) => {
+                descText += (index > 0 ? ", " : "") + `<span class="font-bold text-orange-600">${item.name}</span>`;
+                item.subs.forEach(idx => {
+                    const targetId = category.includes('천간') ? `gan-${idx}` : `ji-${idx}`;
+                    const box = document.getElementById(targetId);
+                    if (box) {
+                        box.classList.remove('bg-white');
+                        box.classList.add('bg-[#ffcc80]', 'border-[#ffa726]', 'scale-105');
+                    }
+                });
+            });
+            descBox.innerHTML = `${category}에 ${descText}이(가) 있어요.`;
+        } else {
+            descBox.innerHTML = `<span class="text-gray-400">${category} 관계가 이 사주에는 없습니다.</span>`;
+        }
+    }
+
+    // 초기 실행: '궁성' 선택
+    window.onload = () => highlightInteraction('궁성');
+</script>
 </html>
