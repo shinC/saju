@@ -184,6 +184,65 @@
     </div>
 </section>
 
+<section class="my-12 mx-4 p-8 bg-white rounded-[32px] shadow-sm border border-gray-100">
+    <div class="flex items-center gap-2 mb-4">
+        <h2 class="text-xl font-bold text-gray-800">신살과 길성</h2>
+        <div class="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center text-white text-[10px]">
+            <i class="fas fa-search"></i>
+        </div>
+    </div>
+
+    <div class="text-sm text-gray-500 mb-8">
+        {% set summary = [] %}
+        {% for p in result.pillars %}{% for s in p.special %}{% if s not in summary %}{% set _ = summary.append(s) %}{% endif %}{% endfor %}{% endfor %}
+        {{ summary | join(', ') }}
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full border-collapse border border-gray-100 text-center text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-[11px]">
+                <tr>
+                    <th class="border border-gray-100 py-2 w-16"></th>
+                    <th>생시</th><th>생일</th><th>생월</th><th>생년</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="border-t border-gray-100">
+                    <td class="bg-gray-50 text-[11px] text-gray-400">천간</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td class="py-4 text-xl font-bold text-{{ result.pillars[i].gan_elem }}">{{ result.pillars[i].gan_kor }}</td>
+                    {% endfor %}
+                </tr>
+                <tr class="border-b border-gray-100">
+                    <td class="bg-gray-50 text-[11px] text-gray-400">길성</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td class="py-2 text-[11px] text-gray-500 leading-tight">
+                        {% for s in result.pillars[i].sinsal_table_gan %}{{ s }}<br>{% endfor %}
+                        {% if not result.pillars[i].sinsal_table_gan %}×{% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="bg-gray-50 text-[11px] text-gray-400">지지</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td class="py-4 text-xl font-bold text-{{ result.pillars[i].ji_elem }}">{{ result.pillars[i].ji_kor }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="bg-gray-50 text-[11px] text-gray-400">길성</td>
+                    {% for i in [3, 2, 1, 0] %}
+                    <td class="py-2 text-[11px] text-gray-500 leading-tight">
+                        {% for s in result.pillars[i].sinsal_table_ji %}{{ s }}<br>{% endfor %}
+                        {% if not result.pillars[i].sinsal_table_ji %}×{% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+
     <section class="p-6">
         <h2 class="text-lg font-bold mb-4 flex justify-between items-center">
             <span>대운 <span class="text-sm font-normal text-gray-400 ml-2">대운수 {{ result.daeun_num }}</span></span>

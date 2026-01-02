@@ -146,27 +146,58 @@ class SajuEngine:
         return sc.TEN_GODS_MAP.get((rel, is_same), "-")
 
     def _investigate_sinsal(self, palja, me, me_hj):
-        """UI에 필요한 모든 정밀 데이터(한글, 음양기호, 지장간, 운성)를 Pillar에 담습니다."""
+        """제공해주신 코드를 기반으로, 기존 데이터를 보존하며 표 출력용 필드만 추가합니다."""
 
         y_ji, d_ji = palja[1], palja[5]
+        # 사용자님의 상수 명칭인 SAMHAP_START_MAP을 그대로 사용합니다.
         start_y, start_d = sc.BRANCHES.find(sc.SAMHAP_START_MAP[y_ji]), sc.BRANCHES.find(sc.SAMHAP_START_MAP[d_ji])
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
 
         pillars = []
         for i in range(4):
+            # 1. 기존 변수 초기화 (g, j, special) - 제공 코드 유지
             g, j, special = palja[i*2], palja[i*2+1], []
             
-            # 신살 로직 (기존 리팩토링 유지)
+            # 2. 기존 12신살 로직 - 제공 코드 유지
             s12_y = sc.SINSAL_12_NAMES[(sc.BRANCHES.find(j) - start_y) % 12]
             s12_d = sc.SINSAL_12_NAMES[(sc.BRANCHES.find(j) - start_d) % 12]
             special.append(s12_y)
             if s12_d != s12_y: special.append(f"{s12_d}(일)")
             
-            # UI용 데이터 매핑
+            # -------------------------------------------------------
+            # [추가 영역] 요약본(special)과 상세 표를 동기화하기 위한 분류
+            # -------------------------------------------------------
+            sinsal_table_gan = []
+            sinsal_table_ji = [s12_y] # 12신살은 지지 기반이므로 지지 리스트에 추가
+            if s12_d != s12_y: sinsal_table_ji.append(f"{s12_d}(일)")
+
+            # 일간 기준 길성 분석 (천을, 태극 등) 및 표 리스트 배분
+            for mapping, name, m_type in sc.ME_MAPPING_RULES:
+                val = mapping.get(me)
+                if val:
+                    if (m_type == "single" and j == val) or (m_type == "list" and j in val):
+                        if name not in special: special.append(name)
+                        sinsal_table_ji.append(name) # 지지에 해당하는 길성 추가
+
+            # 기둥/글자 자체 신살 (백호, 현침 등) 배분
+            if (g + j) in sc.BAEKHO_LIST:
+                if "백호대살" not in special: special.append("백호대살")
+                sinsal_table_gan.append("백호대살")
+            
+            if g in sc.HYEONCHIM_CHARS:
+                if "현침살" not in special: special.append("현침살")
+                sinsal_table_gan.append("현침살")
+            if j in sc.HYEONCHIM_CHARS:
+                if "현침살" not in special: special.append("현침살")
+                sinsal_table_ji.append("현침살")
+            # -------------------------------------------------------
+
+            # 3. UI용 데이터 매핑 (gan_pol_str 등) - 제공 코드 유지
             gan_pol_str = "+" if sc.FUNCTIONAL_POLARITY[g] else "-"
             ji_pol_str = "+" if sc.FUNCTIONAL_POLARITY[j] else "-"
             
+            # 4. 결과 구성 (모든 기존 키값 보존 + 신규 표 전용 키 2개 추가)
             pillars.append({
                 "gan": g, "gan_kor": sc.B_KOR[g], "gan_elem": sc.ELEMENT_MAP[g], "gan_pol": gan_pol_str,
                 "ji": j, "ji_kor": sc.B_KOR[j], "ji_elem": sc.ELEMENT_MAP[j], "ji_pol": ji_pol_str,
@@ -175,7 +206,10 @@ class SajuEngine:
                 "jijangan": sc.JIJANGAN_MAP.get(j, "-"),
                 "unseong": sc.UNSEONG_MAP.get(me, {}).get(j, "-"),
                 "sinsal_12": s12_y,
-                "special": sorted(list(set(special)))
+                "special": sorted(list(set(special))),
+                # 아래 필드가 추가되어 상세 표(길성 행)에도 데이터가 나옵니다.
+                "sinsal_table_gan": sorted(list(set(sinsal_table_gan))),
+                "sinsal_table_ji": sorted(list(set(sinsal_table_ji)))
             })
         return pillars
 
