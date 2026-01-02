@@ -242,6 +242,87 @@
     </div>
 </section>
 
+<section class="my-12 mx-4 p-8 bg-white rounded-[32px] shadow-sm border border-gray-100">
+    <h2 class="text-xl font-bold text-gray-800 mb-6">오행과 십성 분석</h2>
+    
+    <div class="flex flex-col gap-2 mb-10 text-xs text-gray-400">
+        <label class="flex items-center gap-2">
+            <input type="checkbox" class="rounded-sm border-gray-300" checked disabled> 
+            합에 따른 오행 변화 적용 <span class="text-[10px] bg-gray-100 p-1 rounded-full text-gray-400">?</span>
+        </label>
+        <label class="flex items-center gap-2">
+            <input type="checkbox" class="rounded-sm border-gray-300" checked disabled> 
+            조후와 궁성 보정값 적용 <span class="text-[10px] bg-gray-100 p-1 rounded-full text-gray-400">?</span>
+        </label>
+    </div>
+
+    <div class="grid grid-cols-2 gap-8 mb-12">
+        <div class="relative flex flex-col items-center">
+            <canvas id="elementChart" width="160" height="160"></canvas>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                <span class="text-2xl font-bold text-gray-700">{{ result.representative_elem }}</span>
+            </div>
+        </div>
+        <div class="relative flex flex-col items-center">
+            <canvas id="tengodChart" width="160" height="160"></canvas>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                <span class="text-lg font-bold text-gray-700 leading-tight">{{ result.representative_tendency }}</span>
+            </div>
+        </div>
+    </div>
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="grid grid-cols-2 bg-gray-50 border-b border-gray-100">
+        <div class="py-3 text-center text-sm font-bold text-gray-600 border-r border-gray-100">오행</div>
+        <div class="py-3 text-center text-sm font-bold text-gray-600">십성</div>
+    </div>
+
+    <div class="divide-y divide-gray-100">
+        {% for row in result.forestellar_analysis %}
+        <div class="grid grid-cols-2">
+            <div class="p-4 border-r border-gray-100 flex flex-col justify-center items-center">
+                <div class="text-base font-bold mb-1
+                    {% if row.elem_name == '목' %}text-green-600
+                    {% elif row.elem_name == '화' %}text-red-600
+                    {% elif row.elem_name == '토' %}text-yellow-700
+                    {% elif row.elem_name == '금' %}text-gray-500
+                    {% elif row.elem_name == '수' %}text-blue-600{% endif %}">
+                    {{ row.elem_name }}
+                </div>
+                <div class="text-xs text-gray-500">
+                    {{ row.score }} <span class="ml-1 px-1.5 py-0.5 rounded-md bg-gray-100 text-[10px]">{{ row.status }}</span>
+                </div>
+            </div>
+
+            <div class="p-4 flex flex-col justify-center space-y-2 text-xs">
+                <div class="flex justify-between items-center h-5">
+                    <span class="text-gray-700">{{ row.tg1_name }}</span>
+                    <span class="font-mono text-gray-400">{{ row.tg1_ratio }}</span>
+                </div>
+                <div class="flex justify-between items-center h-5 border-t border-dotted border-gray-200 pt-1">
+                    <span class="text-gray-700">{{ row.tg2_name }}</span>
+                    <span class="font-mono text-gray-400">{{ row.tg2_ratio }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="mt-8 flex justify-around p-6 bg-gray-50 rounded-2xl">
+    <div class="text-center">
+        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">나의 본질</div>
+        <div class="text-xl font-bold text-gray-800">{{ result.me_elem }}</div>
+        <div class="text-[10px] text-gray-400">({{ result.me }})</div>
+    </div>
+    <div class="w-px h-8 bg-gray-200 self-center"></div>
+    <div class="text-center">
+        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">대표 성향</div>
+        <div class="text-xl font-bold text-blue-600">{{ result.representative_tendency }}</div>
+        <div class="text-[10px] text-gray-400">({{ result.representative_elem }}기운)</div>
+    </div>
+</div>
+</section>
+
 
     <section class="p-6">
         <h2 class="text-lg font-bold mb-4 flex justify-between items-center">
