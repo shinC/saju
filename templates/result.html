@@ -256,20 +256,62 @@
         </label>
     </div>
 
-    <div class="grid grid-cols-2 gap-8 mb-12">
-        <div class="relative flex flex-col items-center">
-            <canvas id="elementChart" width="160" height="160"></canvas>
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                <span class="text-2xl font-bold text-gray-700">{{ result.representative_elem }}</span>
+   <div class="max-w-5xl mx-auto px-4 py-8">
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12 items-center">
+        
+        <div class="flex flex-col items-center">
+            <h3 class="text-sm font-bold text-gray-700 mb-6">대표 오행 (본질)</h3>
+            <div class="relative w-full max-w-[240px] aspect-square">
+                <canvas id="elementDoughnutChart"></canvas>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none w-full">
+                    <div class="text-2xl font-extrabold
+                        {% if result.representative_elem == '목' %}text-green-600
+                        {% elif result.representative_elem == '화' %}text-red-600
+                        {% elif result.representative_elem == '토' %}text-yellow-700
+                        {% elif result.representative_elem == '금' %}text-gray-500
+                        {% elif result.representative_elem == '수' %}text-blue-600{% endif %}">
+                        {{ result.representative_elem }}
+                        <span class="text-base">
+                            {% if result.representative_elem == '목' %}(木)
+                            {% elif result.representative_elem == '화' %}(火)
+                            {% elif result.representative_elem == '토' %}(土)
+                            {% elif result.representative_elem == '금' %}(金)
+                            {% elif result.representative_elem == '수' %}(水){% endif %}
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="relative flex flex-col items-center">
-            <canvas id="tengodChart" width="160" height="160"></canvas>
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                <span class="text-lg font-bold text-gray-700 leading-tight">{{ result.representative_tendency }}</span>
+
+        <div class="flex flex-col items-center">
+            <h3 class="text-sm font-bold text-gray-700 mb-6">대표 성향 (가장 강한)</h3>
+            <div class="relative w-full max-w-[240px] aspect-square">
+                <canvas id="tengodDoughnutChart"></canvas>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none w-full">
+                    <div class="text-xl font-extrabold text-gray-700">
+                        {{ result.representative_tendency }}
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-1 font-bold">
+                        {% if '비견' in result.representative_tendency %}(比肩)
+                        {% elif '겁재' in result.representative_tendency %}(劫財)
+                        {% elif '식신' in result.representative_tendency %}(食神)
+                        {% elif '상관' in result.representative_tendency %}(傷官)
+                        {% elif '편재' in result.representative_tendency %}(偏財)
+                        {% elif '정재' in result.representative_tendency %}(正財)
+                        {% elif '편관' in result.representative_tendency %}(偏官)
+                        {% elif '정관' in result.representative_tendency %}(正官)
+                        {% elif '편인' in result.representative_tendency %}(偏印)
+                        {% elif '정인' in result.representative_tendency %}(正印){% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+
+
+    
 <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
     <div class="grid grid-cols-2 bg-gray-50 border-b border-gray-100">
         <div class="py-3 text-center text-sm font-bold text-gray-600 border-r border-gray-100">오행</div>
@@ -306,24 +348,84 @@
         </div>
         {% endfor %}
     </div>
-</div>
+</div>ㅉ
+</section>
+<section class="p-6 bg-white rounded-3xl shadow-sm">
 
-<div class="mt-8 flex justify-around p-6 bg-gray-50 rounded-2xl">
-    <div class="text-center">
-        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">나의 본질</div>
-        <div class="text-xl font-bold text-gray-800">{{ result.me_elem }}</div>
-        <div class="text-[10px] text-gray-400">({{ result.me }})</div>
+    <div class="mt-8 mb-4 px-2 text-left">
+        <h3 class="text-lg font-bold text-gray-800">나의 오행: {{ result.me_elem }}{{ result.me }}</h3>
+        <div class="flex flex-col mt-2 space-y-1">
+            <div class="flex items-center text-xs font-semibold text-gray-500">
+                <span class="text-[#428BFF] mr-2">➔</span> 생(生)
+            </div>
+            <div class="flex items-center text-xs font-semibold text-gray-500">
+                <span class="text-[#E85E5E] mr-2">➔</span> 극(剋)
+            </div>
+        </div>
     </div>
-    <div class="w-px h-8 bg-gray-200 self-center"></div>
-    <div class="text-center">
-        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">대표 성향</div>
-        <div class="text-xl font-bold text-blue-600">{{ result.representative_tendency }}</div>
-        <div class="text-[10px] text-gray-400">({{ result.representative_elem }}기운)</div>
+
+    <div class="relative mx-auto my-8" style="width: 100%; max-width: 480px; aspect-ratio: 256 / 250;">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 256 250" fill="none" class="absolute inset-0 z-10 pointer-events-none">
+            <path d="M95.1846 64.5709L83.6958 65.7286L90.4427 75.0994L95.1846 64.5709ZM76.2921 79.4058L88.4651 70.6412L87.2965 69.0181L75.1235 77.7827L76.2921 79.4058Z" fill="#428BFF"></path>
+            <path d="M185.585 75.8724L180.762 65.3809L174.087 74.8036L185.585 75.8724ZM165.422 62.816L177.662 71.4863L178.818 69.8542L166.578 61.184L165.422 62.816Z" fill="#428BFF"></path>
+            <path d="M196.411 168.768L205.05 161.107L194.096 157.456L196.411 168.768ZM203.051 145.684L198.308 159.914L200.205 160.546L204.949 146.316L203.051 145.684Z" fill="#428BFF"></path>
+            <path d="M116 208.5L126 214.274L126 202.726L116 208.5ZM140 207.5L125 207.5L125 209.5L140 209.5L140 207.5Z" fill="#428BFF"></path>
+            <path d="M52.1034 144.666L49.6925 155.959L60.6775 152.4L52.1034 144.666ZM60.4512 167.192L55.8282 152.92L53.9255 153.537L58.5486 167.808L60.4512 167.192Z" fill="#428BFF"></path>
+
+            <path d="M99.2981 170.944C99.1359 171.472 99.4324 172.031 99.9603 172.193C100.488 172.356 101.048 172.059 101.21 171.531L99.2981 170.944ZM126.108 87.0952L117.652 94.9584L128.69 98.3499L126.108 87.0952ZM101.21 171.531L124.42 95.992L122.509 95.4046L99.2981 170.944L101.21 171.531Z" fill="#E85E5E"></path>
+            <path d="M157.192 169.365L159.654 158.084L148.653 161.593L157.192 169.365ZM129.489 85.8024L153.505 161.095L155.41 160.487L131.395 85.1947L129.489 85.8024Z" fill="#E85E5E"></path>
+            <path d="M82.4506 120.765L87.2592 131.263L93.9466 121.849L82.4506 120.765ZM154.775 170.917L90.3668 125.162L89.2085 126.792L153.617 172.548L154.775 170.917Z" fill="#E85E5E"></path>
+            <path d="M172 118L162 112.226V123.774L172 118ZM84 119H163V117H84V119Z" fill="#E85E5E"></path>
+            <path d="M102.234 174.283L113.7 172.918L106.785 163.67L102.234 174.283ZM172.116 120.778L108.843 168.092L110.04 169.694L173.313 122.38L172.116 120.778Z" fill="#E85E5E"></path>
+        </svg>
+
+        {% for group in result.relation_groups %}
+        <div class="node-item node-pos-{{ loop.index0 }} absolute flex flex-col items-center justify-center bg-white border border-[#B8B2AC] rounded-full shadow-sm z-20 overflow-hidden transition-transform active:scale-95"
+             style="width: 100px; height: 100px; transform: translate(-50%, -50%);">
+            
+            <span class="text-[14px] font-bold text-[#524C46] mb-0.5">{{ group.elem_name }}({{ group.group_name }})</span>
+            <span class="text-[18px] font-black text-[#524C46] leading-none">{{ group.score }}</span>
+            
+            <div class="absolute bottom-0 left-0 w-full opacity-60 -z-10 transition-all duration-1000"
+                 style="height: {{ group.percent }}%; background-color: {% if group.elem_name == '목' %}#99DFF9{% elif group.elem_name == '화' %}#FDAAAA{% elif group.elem_name == '토' %}#FFD36E{% elif group.elem_name == '금' %}#DAD6D2{% else %}#B1B0BB{% endif %};">
+            </div>
+        </div>
+        {% endfor %}
     </div>
-</div>
+
+    <style>
+        /* 256x250 좌표계 기반 노드 정밀 배치 */
+        .node-pos-0 { top: 16%; left: 50.4%; }   /* 목 */
+        .node-pos-1 { top: 42%; left: 84.4%; }   /* 화 */
+        .node-pos-2 { top: 83.2%; left: 71.5%; } /* 토 */
+        .node-pos-3 { top: 83.2%; left: 28.9%; } /* 금 */
+        .node-pos-4 { top: 42%; left: 15.6%; }   /* 수 */
+
+        /* 모바일 반응형: 원 크기 80px로 조정 */
+        @media (max-width: 640px) {
+            .node-item { width: 80px !important; height: 80px !important; }
+            .node-item span:first-child { font-size: 11px; }
+            .node-item span:last-child { font-size: 14px; }
+        }
+    </style>
+
 </section>
 
+    <section class="p-6">
+        <h2 class="text-lg font-bold mb-4">신강/신약 분석</h2>
+        <div class="bg-gray-50 p-6 rounded-[28px] border border-gray-100">
+            <p class="text-sm text-gray-600">
+                {{ result.name }}님은 <span class="font-bold text-black">{{ result.status }}({{ result.power }})</span> 사주입니다.
+            </p>
+            <div class="relative h-2 bg-gray-200 rounded-full mt-8">
+                <div class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
+                     style="left: {{ result.power }}%;"></div>
+            </div>
+        </div>
+    </section>
 
+    
     <section class="p-6">
         <h2 class="text-lg font-bold mb-4 flex justify-between items-center">
             <span>대운 <span class="text-sm font-normal text-gray-400 ml-2">대운수 {{ result.daeun_num }}</span></span>
@@ -341,19 +443,6 @@
         </div>
     </section>
 
-    <section class="p-6">
-        <h2 class="text-lg font-bold mb-4">신강/신약 분석</h2>
-        <div class="bg-gray-50 p-6 rounded-[28px] border border-gray-100">
-            <p class="text-sm text-gray-600">
-                {{ result.name }}님은 <span class="font-bold text-black">{{ result.status }}</span> 사주입니다.
-            </p>
-            <div class="relative h-2 bg-gray-200 rounded-full mt-8">
-                <div class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
-                     style="left: {{ result.power }}%;"></div>
-            </div>
-        </div>
-    </section>
-
     <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around py-3 text-[10px] text-gray-400 z-50">
         <div class="text-center text-black font-bold">🔮 사주분석</div>
         <div class="text-center">🍀 행운정보</div>
@@ -361,6 +450,8 @@
     </nav>
 
 </body>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <script>
     // 아코디언 토글 로직
     function toggleDetailedView() {
@@ -430,7 +521,61 @@
             descBox.innerHTML = `<span class="text-gray-400">${category} 관계가 이 사주에는 없습니다.</span>`;
         }
     }
+// Chart.js 플러그인 등록
+    Chart.register(ChartDataLabels);
 
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: true, // 정사각형 유지
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false },
+            datalabels: { display: false }
+        },
+        cutout: '78%', // 도넛 두께를 더 얇게 하여 세련되게 조정
+        animation: { animateScale: true, animateRotate: true }
+    };
+
+    // 1. 오행 차트
+    const elementScores = {{ result.scores | tojson }};
+    const elementLabels = ['목', '화', '토', '금', '수'];
+    const elementColors = { '목': '#16a34a', '화': '#dc2626', '토': '#a16207', '금': '#6b7280', '수': '#2563eb' };
+
+    new Chart(document.getElementById('elementDoughnutChart'), {
+        type: 'doughnut',
+        data: {
+            labels: elementLabels,
+            datasets: [{
+                data: elementLabels.map(l => elementScores[l] || 0),
+                backgroundColor: elementLabels.map(l => elementColors[l]),
+                borderWidth: 0
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 2. 십성 차트
+    const tengodAnalysis = {{ result.tengod_analysis | tojson }};
+    const tengodOrder = ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"];
+    const tengodColors = [
+        '#4ade80', '#22c55e', '#f87171', '#ef4444', '#facc15', 
+        '#eab308', '#9ca3af', '#6b7280', '#60a5fa', '#3b82f6'
+    ];
+    const tgMap = {};
+    tengodAnalysis.forEach(i => tgMap[i.name] = parseFloat(i.ratio.replace('%', '')) || 0);
+
+    new Chart(document.getElementById('tengodDoughnutChart'), {
+        type: 'doughnut',
+        data: {
+            labels: tengodOrder,
+            datasets: [{
+                data: tengodOrder.map(l => tgMap[l] || 0),
+                backgroundColor: tengodColors,
+                borderWidth: 0
+            }]
+        },
+        options: commonOptions
+    });
     // 초기화
     window.onload = () => highlightInteraction('궁성');
 </script>

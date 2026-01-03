@@ -403,6 +403,8 @@ class SajuEngine:
         
         # 6. [데이터 동기화] 8글자(palja) 구성
         palja = [yG[0], yG[1], mG[0], mG[1], target_dG[0], target_dG[1], hG_gan, sc.BRANCHES[h_idx]]
+        print(f"\n>>> palja:\n{palja}")
+
         
         # 7. 오행/신강약 분석
         me_hj = sc.E_MAP_HJ.get(palja[4]) 
@@ -444,25 +446,39 @@ class SajuEngine:
         # ----------------------------------------------------------------------
         elements_fixed = ["목", "화", "토", "금", "수"]
         tg_pairs = [("비견", "겁재"), ("식신", "상관"), ("편재", "정재"), ("편관", "정관"), ("편인", "정인")]
+        group_names = ["비겁", "식상", "재성", "관성", "인성"]
         
         me_elem_name = sc.ELEMENT_MAP[palja[4]]
         me_idx = elements_fixed.index(me_elem_name)
         
-        forestellar_analysis = []
+        forestellar_analysis = [] # 표 전용 (목화토금수 순서)
+        relation_groups = [None] * 5 # 그래프 전용 (나부터 시작하는 순서)
+
         for i, elem in enumerate(elements_fixed):
-            dist = (i - me_idx) % 5
+            dist = (i - me_idx) % 5  # 나와의 거리 (0:비겁, 1:식상...)
             pair = tg_pairs[dist]
             e_status = element_dict.get(elem, {"score": "0.0%", "status": "부족"})
             
-            forestellar_analysis.append({
+            # 1. 표(Table) 데이터 구성
+            row_data = {
                 "elem_name": elem,
                 "score": e_status['score'],
+                "percent": float(e_status['score'].replace('%', '')), # 숫자형 추가
                 "status": e_status['status'],
                 "tg1_name": pair[0],
                 "tg1_ratio": tengod_dict.get(pair[0], {}).get('ratio', '-'),
                 "tg2_name": pair[1],
                 "tg2_ratio": tengod_dict.get(pair[1], {}).get('ratio', '-')
-            })
+            }
+            forestellar_analysis.append(row_data)
+
+            # 2. 그래프(Graph) 데이터 구성 (나를 0번 인덱스에 배치)
+            relation_groups[dist] = {
+                "group_name": group_names[dist],
+                "elem_name": elem,
+                "score": row_data["score"],
+                "percent": row_data["percent"]
+            }
         # ----------------------------------------------------------------------
 
         # [교정] 대표 오행 추출 (동률 시 일간 우선 로직)
@@ -510,6 +526,7 @@ class SajuEngine:
             "tengod_analysis": tengod_list,
             "forestellar_analysis": forestellar_analysis, # 통합 분석 데이터 추가
             "me_kor": me_elem_name, 
+            "relation_groups" :relation_groups
         }
         
         debug_json = json.dumps(final_result, indent=4, ensure_ascii=False, default=str)
