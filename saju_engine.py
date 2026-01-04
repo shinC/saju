@@ -445,17 +445,21 @@ class SajuEngine:
         res = {k: [] for k in sc.INTERACTION_KEYS}
         sl = [palja[0], palja[2], palja[4], palja[6]]
         bl = [palja[1], palja[3], palja[5], palja[7]]
-        
+        print(f"\n>>> DEBUG REPORT:\n sl: { sl }")
+        print(f"\n>>> DEBUG REPORT:\n bl: { bl }")
         for i in range(4):
             for j in range(i + 1, 4):
                 for key, mapping, target_type in sc.PAIRWISE_RULES:
                     target_list = sl if target_type == "stem" else bl
                     pair = "".join(sorted([target_list[i], target_list[j]]))
                     if pair in mapping: res[key].append({"name": mapping[pair], "subs": [i, j]})
-        
+        print(f"\n>>> DEBUG REPORT:\n bl : {bl} ,res : { res }")
         self._check_group_interactions(bl, res)
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
+        print(f"\n>>> DEBUG REPORT:\n  bl2 : {bl} , res2 : { res }")
+        print(f"\n>>> DEBUG REPORT:\n  ilju_name : {ilju_name} ")
+        print(f"\n>>> DEBUG REPORT:\n  g_jis : {g_jis} ")
         for i, b in enumerate(bl):
             if b in g_jis: res["공망"].append({"name": f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})", "subs": [i]})
 
@@ -465,6 +469,8 @@ class SajuEngine:
             for item in v:
                 if item["name"] not in seen: unique_list.append(item); seen.add(item["name"])
             unique_res[k] = sorted(unique_list, key=lambda x: x["name"])
+        
+        print(f"\n>>> DEBUG REPORT:\n  unique_res : {unique_res} ")
         return unique_res
 
     def _check_group_interactions(self, bl, res):
@@ -787,7 +793,7 @@ class SajuEngine:
             "initial_calendar": self.get_month_calendar(now.year, now.month)  
         }
         
-        debug_json = json.dumps(final_result, indent=4, ensure_ascii=False, default=str)
-        print(f"\n>>> DEBUG REPORT:\n{debug_json}")
+        # debug_json = json.dumps(final_result, indent=4, ensure_ascii=False, default=str)
+        # print(f"\n>>> DEBUG REPORT:\n{debug_json}")
 
         return final_result

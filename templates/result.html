@@ -35,8 +35,8 @@
     </header>
 
     <div class="px-6 py-4 bg-gray-50 text-[11px] text-gray-400 leading-relaxed border-b">
-        <p>양 {{ result.solar_display }} {{ result.gender_str }}</p>
-        <p class="text-blue-400">음({{ result.lunar_type }}달) {{ result.lunar_display }}</p>
+        <p>양 {{ result.solar_display }} {{ result.gender_str }} {{ result.location_name }}</p>
+        <p class="text-blue-400">음({{ result.lunar_type }}달) {{ result.lunar_display }} {{ result.gender_str }} {{ result.location_name }}</p>
         <p class="text-black font-medium">
             <span class="text-red-400 font-bold">실제 태양시</span> {{ result.corrected_display }} 
             <span class="text-red-400">({{ result.location_name }} {{ result.lng_diff_str }})</span>
@@ -63,7 +63,7 @@
                         <div class="flex flex-col items-center">
                             <div class="flex items-end">
                                 <span class="text-2xl">{{ p.gan }}</span>
-                                <span class="text-[10px] ml-0.5 opacity-70">{{ p.gan_kor }}</span>
+                                <span class="text-2xl ml-0.5 opacity-70">{{ p.gan_kor }}</span>
                             </div>
                             <span class="text-[9px] mt-1 font-bold">{{ p.gan_pol }}{{ p.gan_elem }}</span>
                         </div>
@@ -88,7 +88,7 @@
                         <div class="flex flex-col items-center">
                             <div class="flex items-end">
                                 <span class="text-2xl">{{ p.ji }}</span>
-                                <span class="text-[10px] ml-0.5 opacity-70">{{ p.ji_kor }}</span>
+                                <span class="text-2xl ml-0.5 opacity-70">{{ p.ji_kor }}</span>
                             </div>
                             <span class="text-[9px] mt-1 font-bold">{{ p.ji_pol }}{{ p.ji_elem }}</span>
                         </div>
@@ -857,9 +857,9 @@ function renderWolunList(data) {
 
     // 현재 달이 있는 곳으로 스크롤 자동 이동
     const activeItem = container.querySelector('.ring-indigo-500');
-    if (activeItem) {
-        activeItem.parentElement.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }
+    // if (activeItem) {
+    // //    activeItem.parentElement.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    // }
 }    // 초기화
 
 const today = new Date();
@@ -975,7 +975,7 @@ function handleDateSelect() {
             if (targetContainer) {
                 targetContainer.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
             }
-            currentDaeunBox.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          //  currentDaeunBox.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
 
     // 2. [추가] 초기 연운 중 현재 연도(예: 2026) 박스 하이라이트
@@ -986,7 +986,7 @@ function handleDateSelect() {
         if (yearText == currentYear) {
             const container = box.querySelector('.ganzi-container');
             if (container) container.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
-            box.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+       //     box.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
     });
     initYearSelect();
