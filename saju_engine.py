@@ -137,25 +137,92 @@ class SajuEngine:
 
     def _calculate_strength_score(self, palja, me_hj):
         """
-        2. 신강약 세력(Power) 계산 (득령, 득지, 득시, 득세 가중치 적용)
-        가중치 설정: 월지(30), 일지(15), 시지(15), 년지(10), 월간/시간/년간(각 10)
+        [최종 확정판] 정밀 튜닝된 신강약 세력(Power) 계산 로직
+        1. 득령(월령): 계절 가중치 밸런싱 (30점 기준) 및 중복 방지
+        2. 득지(통근): '강한 오행'일 때만 보너스 합산하여 과다 누적 방지
+        3. 득세(머릿수): 일간/월지 제외 순수 주변 세력 및 억제 세력(-5.0) 감점 로직
+        4. 합(Hap) 매칭: '목' in '목국' 형태의 문자열 비교 오류 수정
         """
-        # 위치별 가중치 정의 (합계 100)
-        # palja index: [0:년건, 1:년지, 2:월건, 3:월지, 4:일건(Me), 5:일지, 6:시건, 7:시지]
-        weights = [10, 10, 10, 30, 0, 15, 10, 15] 
-        
+        # 일간 오행 (예: '금')
+        me_elem = sc.ELEMENT_MAP[palja[4]]
         power_score = 0.0
+
+        # --- 1. 득령(得令) 분석: 월지 계절 가중치 (30점 기준) ---
+        wol_hj = sc.E_MAP_HJ[palja[3]]
+        rel_wol = sc.REL_MAP.get((me_hj, wol_hj))
         
-        # 각 자리의 글자가 나를 돕는 세력(인성/비겁)인지 판별하여 가중치 합산
-        for i, char in enumerate(palja):
-            if i == 4: continue # 일간 본인은 계산 제외
-            
+        if rel_wol in ["비견", "겁재"]: 
+            power_score += 30.0  # 왕(旺): 35점에서 30점으로 하향 조정
+        elif rel_wol in ["편인", "정인"]: 
+            power_score += 22.0  # 상(相)
+        elif rel_wol in ["식신", "상관"]: 
+            power_score += 8.0   # 휴(休)
+
+        # --- 2. 득지(得地) 및 통근 분석: 중복 제거 및 감점 반영 ---
+        # 지지 가중치: 일지(15), 시지(15), 년지(10)
+        ji_indices = {5: 15.0, 7: 15.0, 1: 10.0}
+        
+        for idx, weight in ji_indices.items():
+            char = palja[idx]
             target_hj = sc.E_MAP_HJ[char]
-            # 나(me_hj)와 대상 글자의 관계가 강한 에너지(비겁/인성) 그룹에 속하는지 확인
-            if sc.REL_MAP.get((me_hj, target_hj)) in sc.STRONG_ENERGY:
-                power_score += weights[i]
-                
-        return power_score
+            relation = sc.REL_MAP.get((me_hj, target_hj))
+            
+            # [수정] 나를 돕는 오행인 경우에만 기본 점수와 통근 보너스 합산
+            if relation in sc.STRONG_ENERGY:
+                power_score += weight
+                # 통근 보너스: 내 글자가 지장간에 실제로 뿌리를 내린 경우만 가산
+                if palja[4] in sc.JIJANGAN_MAP.get(char, ""):
+                    power_score += (weight * 0.3)
+            # [수정] 내 힘을 빼는 오행(재/관/식)인 경우 감점 부여
+            elif relation in sc.WEAK_ENERGY:
+                power_score -= 5.0
+
+        # --- 3. 득세(得勢) 분석: 천간 가중치 및 억제 세력 반영 ---
+        # 천간 가중치: 년간(10), 월간(10), 시간(10)
+        for idx in [0, 2, 6]:
+            char = palja[idx]
+            target_hj = sc.E_MAP_HJ[char]
+            relation = sc.REL_MAP.get((me_hj, target_hj))
+            
+            if relation in sc.STRONG_ENERGY:
+                power_score += 10.0
+            elif relation in sc.WEAK_ENERGY:
+                power_score -= 5.0 # 천간 억제 세력 감점
+
+        # --- 4. 머릿수 보정: 일간(4) 및 월지(3)를 제외한 순수 주변 세력 ---
+        strong_count = sum(
+            1 for i, char in enumerate(palja)
+            if i not in [3, 4] and # 일간 본인과 이미 계산된 월지 제외
+            sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[char])) in sc.STRONG_ENERGY
+        )
+        
+        if strong_count >= 4: 
+            power_score += 10.0
+        elif strong_count <= 1: 
+            power_score -= 10.0
+
+        # --- 5. 합(Hap)의 득세 반영: 문자열 비교 로직 수정 (me_elem in val) ---
+        bl = [palja[1], palja[3], palja[5], palja[7]]
+        
+        # 지지삼합 분석
+        for key, (val, king) in sc.B_SAMHAP.items():
+            match_indices = [b for b in bl if b in key]
+            # [수정] '목' in '목국'은 True이므로 안전하게 매칭됨
+            if len(set(match_indices)) >= 3 and me_elem in val:
+                power_score += 15.0
+            elif len(set(match_indices)) == 2 and king in bl and me_elem in val:
+                power_score += 7.0
+        
+        # 지지방합 분석
+        for key, val in sc.B_BANGHAP.items():
+            match_indices = [b for b in bl if b in key]
+            if len(set(match_indices)) >= 3 and me_elem in val:
+                power_score += 15.0
+            elif len(set(match_indices)) == 2 and me_elem in val:
+                power_score += 7.0
+
+        # 최종 점수 정규화 (0~100점 사이 제한)
+        return max(0, min(100, int(power_score)))
 
     def _get_detailed_status(self, power):
         """신강약 8단계 세분화 (가중치 지수 기반)"""
@@ -441,33 +508,58 @@ class SajuEngine:
         return {"wealth_score": min(100, ws), "career_score": min(100, cs), "wealth_grade": get_grade(ws), "career_grade": get_grade(cs)}
 
     def _analyze_interactions(self, palja):
-        """인덱스를 년(0), 월(1), 일(2), 시(3) 순서로 고정하여 화면과 동기화합니다."""
+        """
+        인덱스를 년(0), 월(1), 일(2), 시(3) 순서로 고정하여 화면과 동기화합니다.
+        양방향 체크 로직을 통해 딕셔너리 키 순서와 상관없이 모든 상호작용을 검출합니다.
+        """
         res = {k: [] for k in sc.INTERACTION_KEYS}
         sl = [palja[0], palja[2], palja[4], palja[6]]
         bl = [palja[1], palja[3], palja[5], palja[7]]
+        
         print(f"\n>>> DEBUG REPORT:\n sl: { sl }")
         print(f"\n>>> DEBUG REPORT:\n bl: { bl }")
+        
         for i in range(4):
             for j in range(i + 1, 4):
                 for key, mapping, target_type in sc.PAIRWISE_RULES:
                     target_list = sl if target_type == "stem" else bl
-                    pair = "".join(sorted([target_list[i], target_list[j]]))
-                    if pair in mapping: res[key].append({"name": mapping[pair], "subs": [i, j]})
+                    
+                    # [수정 구간] 두 글자의 조합을 양방향으로 생성하여 체크합니다.
+                    char1, char2 = target_list[i], target_list[j]
+                    pair1 = char1 + char2
+                    pair2 = char2 + char1
+                    
+                    # 정방향(pair1) 또는 역방향(pair2) 중 하나라도 매핑 테이블에 있는지 확인합니다.
+                    if pair1 in mapping:
+                        res[key].append({"name": mapping[pair1], "subs": [i, j]})
+                    elif pair2 in mapping:
+                        res[key].append({"name": mapping[pair2], "subs": [i, j]})
+                        
         print(f"\n>>> DEBUG REPORT:\n bl : {bl} ,res : { res }")
+        
+        # 삼합/방합/삼형 등 그룹 단위 분석
         self._check_group_interactions(bl, res)
+        
+        # 공망 분석
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
+        
         print(f"\n>>> DEBUG REPORT:\n  bl2 : {bl} , res2 : { res }")
         print(f"\n>>> DEBUG REPORT:\n  ilju_name : {ilju_name} ")
         print(f"\n>>> DEBUG REPORT:\n  g_jis : {g_jis} ")
+        
         for i, b in enumerate(bl):
-            if b in g_jis: res["공망"].append({"name": f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})", "subs": [i]})
+            if b in g_jis: 
+                res["공망"].append({"name": f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})", "subs": [i]})
 
+        # 결과값 중복 제거 및 가나다순 정렬
         unique_res = {}
         for k, v in res.items():
             seen, unique_list = set(), []
             for item in v:
-                if item["name"] not in seen: unique_list.append(item); seen.add(item["name"])
+                if item["name"] not in seen: 
+                    unique_list.append(item)
+                    seen.add(item["name"])
             unique_res[k] = sorted(unique_list, key=lambda x: x["name"])
         
         print(f"\n>>> DEBUG REPORT:\n  unique_res : {unique_res} ")
