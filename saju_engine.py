@@ -220,7 +220,7 @@ class SajuEngine:
                 power_score += 15.0
             elif len(set(match_indices)) == 2 and me_elem in val:
                 power_score += 7.0
-
+        print(f"power_score{power_score}")
         # 최종 점수 정규화 (0~100점 사이 제한)
         return max(0, min(100, int(power_score)))
 
