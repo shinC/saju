@@ -550,6 +550,64 @@ class SajuEngine:
                 "tg2_ratio": f"{(tg_counts[pair[1]] * 12.5):.1f}%" if tg_counts[pair[1]] > 0 else "-"
             })
         return combined_list
+    
+    def get_month_calendar(self, year, month):
+        import calendar
+        cal_data = []
+        last_day = calendar.monthrange(year, month)[1]
+        
+        # 1. 해당 월의 첫날과 마지막 날 데이터를 가져옴
+        first_info = self.m_db.get(f"{year}{month:02d}01")
+        last_info = self.m_db.get(f"{year}{month:02d}{last_day:02d}")
+        
+        saju_header = ""
+        if first_info and last_info:
+            # [수정] 포스텔러 스타일: 연도는 마지막 날(새로운 기운)을 기준으로 하나만 표시
+            # 2026년 2월의 경우, 마지막 날은 입춘 이후이므로 '병오년'으로 고정됩니다.
+            y_final = f"{sc.B_KOR[last_info['yG'][0]]}{sc.B_KOR[last_info['yG'][1]]}"
+            year_part = f"{y_final}년"
+                
+            # [월 범위] 월건은 기존처럼 범위로 표시 (절기 변화 강조)
+            m_start = f"{sc.B_KOR[first_info['mG'][0]]}{sc.B_KOR[first_info['mG'][1]]}"
+            m_end = f"{sc.B_KOR[last_info['mG'][0]]}{sc.B_KOR[last_info['mG'][1]]}"
+            
+            if m_start != m_end:
+                month_part = f"{m_start}~{m_end}월" # 예: "기축~경인월"
+            else:
+                month_part = f"{m_start}월"
+                
+            # [최종 헤더] "병오년 기축~경인월"
+            saju_header = f"{year_part} {month_part}"
+
+        for day in range(1, last_day + 1):
+            date_str = f"{year}{month:02d}{day:02d}"
+            day_info = self.m_db.get(date_str)
+            if day_info:
+                dg = day_info['dG']
+                term_name, term_time = "", ""
+                year_terms = self.t_db.get(str(year), [])
+                for t in year_terms:
+                    if t['datetime'].startswith(f"{year}-{month:02d}-{day:02d}"):
+                        term_name = t['term']
+                        term_time = t['datetime'].split('T')[1]
+                        break
+
+                cal_data.append({
+                    "day": day,
+                    "ganzi_kor": f"{sc.B_KOR[dg[0]]}{sc.B_KOR[dg[1]]}",
+                    "ganzi_hj": dg,
+                    "lunar": f"{day_info['lm']}.{day_info['ld']}",
+                    "term_name": term_name,
+                    "term_time": term_time,
+                    "is_today": (datetime.now().strftime("%Y%m%d") == date_str)
+                })
+        
+        first_weekday = (calendar.monthrange(year, month)[0] + 1) % 7 
+        return {
+            "first_weekday": first_weekday, 
+            "days": cal_data,
+            "saju_header": saju_header # "을사년 정해~무자월" 형태
+        }
     # ==========================================================================
     # 4. 메인 분석 엔진 (Main Analysis Orchestrator)
     # ==========================================================================
@@ -723,7 +781,10 @@ class SajuEngine:
             "me_kor": me_elem_name, 
             "relation_groups" :relation_groups,
             "initial_yeonun": initial_yeonun,
-            "initial_wolun": initial_wolun  # 프론트엔드 초기 렌더링용
+            "initial_wolun": initial_wolun,
+            "now_year": now.year,
+            "now_month": now.month,
+            "initial_calendar": self.get_month_calendar(now.year, now.month)  
         }
         
         debug_json = json.dumps(final_result, indent=4, ensure_ascii=False, default=str)
