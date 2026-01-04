@@ -506,7 +506,56 @@
     </div>
     
     <div id="yeonun-container" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-6 px-1">
+        {% for y in result.initial_yeonun %}
+        <div class="yeonun-item-box flex-shrink-0 w-[58px] flex flex-col items-center cursor-pointer"
+             onclick="loadWolun('{{ y.year }}', '{{ result.me }}', '{{ result.me }}', this)">
+            
+            <div class="text-[12px] font-bold text-gray-600 mb-1">{{ y.year }}</div>
+            <div class="text-[10px] text-gray-500 mb-2 h-4">{{ y.t_gan }}</div>
+            
+            <div class="ganzi-container w-full flex flex-col gap-1.5 rounded-lg transition-all">
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-{{ y.gan_elem }}">
+                    <span class="text-[19px] font-bold {% if y.gan_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">{{ y.gan_kor }}</span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if y.gan_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">{{ y.ganzi[0] }}</span>
+                </div>
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-{{ y.ji_elem }}">
+                    <span class="text-[19px] font-bold {% if y.ji_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">{{ y.ji_kor }}</span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if y.ji_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">{{ y.ganzi[1] }}</span>
+                </div>
+            </div>
+            
+            <div class="mt-2.5 text-center">
+                <div class="text-[10px] text-gray-500">{{ y.t_ji }}</div>
+                <div class="text-[10px] text-gray-400">{{ y.unseong }}</div>
+            </div>
         </div>
+        {% endfor %}
+    </div>
+</section>
+<section class="my-12 mx-4">
+    <h2 class="text-xl font-bold text-gray-800 mb-6 px-2">월운</h2>
+    <div id="wolun-container" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-6 px-1">
+        {% for w in result.initial_wolun %}
+        <div class="flex-shrink-0 w-[58px] flex flex-col items-center">
+            <div class="text-[12px] font-bold text-gray-600 mb-1">{{ w.month }}월</div>
+            <div class="text-[10px] text-gray-500 mb-2 h-4">{{ w.t_gan }}</div>
+            <div class="w-full flex flex-col gap-1.5">
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-{{ w.gan_elem }}">
+                    <span class="text-[19px] font-bold {% if w.gan_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">{{ w.gan_kor }}</span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if w.gan_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">{{ w.ganzi[0] }}</span>
+                </div>
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-{{ w.ji_elem }}">
+                    <span class="text-[19px] font-bold {% if w.ji_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">{{ w.ji_kor }}</span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if w.ji_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">{{ w.ganzi[1] }}</span>
+                </div>
+            </div>
+            <div class="mt-2.5 text-center leading-tight">
+                <div class="text-[10px] text-gray-500">{{ w.t_ji }}</div>
+                <div class="text-[10px] text-gray-400">{{ w.unseong }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 </section>
 <style>
     /* 포스텔러 스타일 오행 컬러 정의 */
@@ -654,68 +703,153 @@
         },
         options: commonOptions
     });
+/**
+ * 대운 클릭 시 호출: 연운 데이터를 가져오고 월운 연결 고리를 생성합니다.
+ */
 async function loadYeonun(birthYear, startAge, meGan, meHj, element) {
-    // [보더 제거 로직] 모든 대운 박스에서 하이라이트 클래스 제거
-    document.querySelectorAll('.ganzi-container').forEach(box => {
+    // 대운 박스 하이라이트
+    document.querySelectorAll('.daeun-item-box .ganzi-container').forEach(box => {
         box.classList.remove('ring-2', 'ring-gray-800', 'ring-offset-1');
     });
-
-    // [보더 추가 로직] 클릭된 요소 내부의 간지 컨테이너에만 테두리 추가
     const targetBox = element.querySelector('.ganzi-container');
-    if (targetBox) {
-        targetBox.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
-    }
+    if (targetBox) targetBox.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
 
     try {
-        // API 호출: 연운 데이터만 가져옴
         const url = `/api/yeonun?birth_year=${birthYear}&start_age=${startAge}&me_gan=${meGan}&me_hj=${meHj}`;
         const response = await fetch(url);
-        const data = await response.json();
+        const yeonunData = await response.json();
 
-        // 하단 연운 섹션 업데이트
-        renderYeonunList(data);
+        // 1. 연운 리스트 그리기 (내림차순 데이터 반영)
+        renderYeonunList(yeonunData, meGan, meHj);
+
+        // 2. [핵심] 가장 오른쪽(최소 연도) 자동 선택 로직
+        if (yeonunData.length > 0) {
+            // 데이터의 마지막 요소가 가장 작은 연도임
+            const earliestYearData = yeonunData[yeonunData.length - 1]; 
+            
+            // 화면상에 그려진 연운 박스들 중 마지막 요소를 찾음
+            const allYeonunBoxes = document.querySelectorAll('#yeonun-container .yeonun-item-box');
+            const lastYeonunElement = allYeonunBoxes[allYeonunBoxes.length - 1];
+            
+            if (lastYeonunElement) {
+                // 가장 오른쪽 연운 박스를 활성화하고 월운 로드
+                loadWolun(earliestYearData.year, meGan, meHj, lastYeonunElement);
+            }
+        }
     } catch (error) {
-        console.error("연운 로드 실패:", error);
+        console.error("연운/월운 연쇄 로딩 실패:", error);
     }
 }
 
-function renderYeonunList(yeonunData) {
+/**
+ * 연운 리스트 출력: 각 연도 박스에 월운 호출 이벤트를 삽입합니다.
+ */
+function renderYeonunList(yeonunData, meGan, meHj) {
     const container = document.getElementById('yeonun-container');
     if (!container) return;
 
-    let html = '';
-    yeonunData.forEach(y => {
-        // 금(金) 오행일 경우 텍스트 색상 및 보더 처리를 위한 조건
-        const isGoldGan = y.gan_elem === '금';
-        const isGoldJi = y.ji_elem === '금';
+    container.innerHTML = yeonunData.map(y => `
+        <div class="yeonun-item-box flex-shrink-0 w-[58px] flex flex-col items-center cursor-pointer"
+             onclick="loadWolun('${y.year}', '${meGan}', '${meHj}', this)">
+            <div class="text-[12px] font-bold text-gray-600 mb-1">${y.year}</div>
+            <div class="text-[10px] text-gray-500 mb-2 h-4 flex items-center justify-center">${y.t_gan}</div>
+            <div class="ganzi-container w-full flex flex-col gap-1.5 rounded-lg transition-all">
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-${y.gan_elem} ${y.gan_elem === '금' ? 'border-gray-200' : ''}">
+                    <span class="text-[19px] font-bold ${y.gan_elem === '금' ? 'text-gray-800' : 'text-white'}">${y.gan_kor}</span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${y.gan_elem === '금' ? 'text-gray-400' : 'text-white/70'}">${y.ganzi[0]}</span>
+                </div>
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-${y.ji_elem} ${y.ji_elem === '금' ? 'border-gray-200' : ''}">
+                    <span class="text-[19px] font-bold ${y.ji_elem === '금' ? 'text-gray-800' : 'text-white'}">${y.ji_kor}</span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${y.ji_elem === '금' ? 'text-gray-400' : 'text-white/70'}">${y.ganzi[1]}</span>
+                </div>
+            </div>
+            <div class="mt-2.5 text-center flex flex-col gap-0.5 leading-tight">
+                <div class="text-[10px] text-gray-500 font-medium">${y.t_ji}</div>
+                <div class="text-[10px] text-gray-400">${y.unseong}</div>
+            </div>
+        </div>
+    `).join('');
+}
+async function loadWolun(targetYear, meGan, meHj, element) {
+    // 1. 연운 박스 선택 강조 (기존 보더 제거 후 추가)
+    document.querySelectorAll('.yeonun-item-box .ganzi-container').forEach(box => {
+        box.classList.remove('ring-2', 'ring-gray-800', 'ring-offset-1');
+    });
+    const targetBox = element.querySelector('.ganzi-container');
+    if (targetBox) targetBox.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
 
-        html += `
+    try {
+        // 2. 월운 API 호출
+        const url = `/api/wolun?target_year=${targetYear}&me_gan=${meGan}&me_hj=${meHj}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        // 3. 월운 리스트 렌더링
+        renderWolunList(data);
+    } catch (error) {
+        console.error("월운 로드 실패:", error);
+    }
+}
+
+function renderWolunList(data) {
+    const container = document.getElementById('wolun-container');
+    const currentMonth = new Date().getMonth() + 1; // 현재 양력 월 (1~12)
+
+    container.innerHTML = data.map(w => {
+        // 현재 달이면 강조 테두리 클래스 추가
+        const isCurrent = (w.month === currentMonth) ? 'ring-2 ring-indigo-500 ring-offset-1' : '';
+        
+        return `
             <div class="flex-shrink-0 w-[58px] flex flex-col items-center">
-                <div class="text-[12px] font-bold text-gray-600 mb-1">${y.year}</div>
-                
-                <div class="text-[10px] text-gray-500 mb-2 h-4 flex items-center justify-center">${y.t_gan}</div>
-                
-                <div class="w-full flex flex-col gap-1.5">
-                    <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-${y.gan_elem} ${isGoldGan ? 'border-gray-200' : ''}">
-                        <span class="text-[19px] font-bold ${isGoldGan ? 'text-gray-800' : 'text-white'}">${y.gan_kor}</span>
-                        <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${isGoldGan ? 'text-gray-400' : 'text-white/70'}">${y.ganzi[0]}</span>
+                <div class="text-[12px] font-bold ${w.month === currentMonth ? 'text-indigo-600' : 'text-gray-600'} mb-1">${w.month}월</div>
+                <div class="text-[10px] text-gray-500 mb-2 h-4">${w.t_gan}</div>
+                <div class="ganzi-container w-full flex flex-col gap-1.5 rounded-lg transition-all ${isCurrent}">
+                    <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm bg-${w.gan_elem} ${w.gan_elem === '금' ? 'border border-gray-200' : ''}">
+                        <span class="text-[19px] font-bold ${w.gan_elem === '금' ? 'text-gray-800' : 'text-white'}">${w.gan_kor}</span>
+                        <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${w.gan_elem === '금' ? 'text-gray-400' : 'text-white/70'}">${w.ganzi[0]}</span>
                     </div>
-                    <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-${y.ji_elem} ${isGoldJi ? 'border-gray-200' : ''}">
-                        <span class="text-[19px] font-bold ${isGoldJi ? 'text-gray-800' : 'text-white'}">${y.ji_kor}</span>
-                        <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${isGoldJi ? 'text-gray-400' : 'text-white/70'}">${y.ganzi[1]}</span>
+                    <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm bg-${w.ji_elem} ${w.ji_elem === '금' ? 'border border-gray-200' : ''}">
+                        <span class="text-[19px] font-bold ${w.ji_elem === '금' ? 'text-gray-800' : 'text-white'}">${w.ji_kor}</span>
+                        <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${w.ji_elem === '금' ? 'text-gray-400' : 'text-white/70'}">${w.ganzi[1]}</span>
                     </div>
                 </div>
-                
-                <div class="mt-2.5 text-center flex flex-col gap-0.5 leading-tight">
-                    <div class="text-[10px] text-gray-500 font-medium">${y.t_ji}</div>
-                    <div class="text-[10px] text-gray-400">${y.unseong}</div>
+                <div class="mt-2.5 text-center leading-tight">
+                    <div class="text-[10px] text-gray-500 font-medium">${w.t_ji}</div>
+                    <div class="text-[10px] text-gray-400">${w.unseong}</div>
                 </div>
             </div>
         `;
-    });
-    container.innerHTML = html;
-}
-    // 초기화
+    }).join('');
+
+    // 현재 달이 있는 곳으로 스크롤 자동 이동
+    const activeItem = container.querySelector('.ring-indigo-500');
+    if (activeItem) {
+        activeItem.parentElement.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+}    // 초기화
     window.onload = () => highlightInteraction('궁성');
+   window.addEventListener('DOMContentLoaded', () => {
+    // 1. 현재 대운 하이라이트 (기존 코드)
+    const currentDaeunBox = document.querySelector('.is-current-daeun');
+    if (currentDaeunBox) {
+        const targetContainer = currentDaeunBox.querySelector('.ganzi-container');
+        if (targetContainer) {
+            targetContainer.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
+        }
+        currentDaeunBox.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+
+    // 2. [추가] 초기 연운 중 현재 연도(예: 2026) 박스 하이라이트
+    const currentYear = new Date().getFullYear();
+    const yeonunBoxes = document.querySelectorAll('#yeonun-container .yeonun-item-box');
+    yeonunBoxes.forEach(box => {
+        const yearText = box.querySelector('div').innerText; // 연도 텍스트 추출
+        if (yearText == currentYear) {
+            const container = box.querySelector('.ganzi-container');
+            if (container) container.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
+            box.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }
+    });
+});
 </script>
 </html>

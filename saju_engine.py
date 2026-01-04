@@ -366,7 +366,57 @@ class SajuEngine:
             # debug_json = json.dumps(yeonun_list, indent=4, ensure_ascii=False, default=str)
             # print(f"\n>>> DEBUG REPORT:\n{debug_json}, -{g}, -{j}")
         return yeonun_list[::-1] # 최신 연도가 왼쪽으로 오게 정렬
+    def get_wolun_only(self, target_year, me_gan, me_hj):
+        """
+        포스텔러 방식: 양력 1월(전년도 축월)부터 12월(당해년도 자월)까지 계산
+        """
+        wolun_list = []
+        me_elem = sc.E_MAP_HJ.get(me_hj) # 일간 오행 (예: '金')
+        target_year = int(target_year)
 
+        # 1. 당해년도분 계산 (양력 2월 ~ 12월 = 사주 인월 ~ 자월)
+        y_idx = (target_year - 2023 + 39) % 60
+        y_stem = self.SIXTY_GANZI[y_idx][0]
+        # 연두법 공식 적용
+        start_stem_idx = (sc.STEMS.index(y_stem) * 2 + 2) % 10
+        
+        for i in range(11): # 인(寅)월부터 자(子)월까지 11개 달
+            g = sc.STEMS[(start_stem_idx + i) % 10]
+            j = sc.BRANCHES[(2 + i) % 12]
+            wolun_list.append({
+                "month": i + 2, # 양력 2월 ~ 12월로 라벨링
+                "ganzi": g + j,
+                "gan_kor": sc.B_KOR[g],
+                "gan_elem": sc.ELEMENT_MAP[g],
+                "t_gan": self._get_ten_god(me_gan, g, me_elem),
+                "ji_kor": sc.B_KOR[j],
+                "ji_elem": sc.ELEMENT_MAP[j],
+                "t_ji": self._get_ten_god(me_gan, j, me_elem),
+                "unseong": sc.UNSEONG_MAP.get(me_gan, {}).get(j, "-"),
+            })
+
+        # 2. 전년도분 계산 (양력 1월 = 사주 전년도 축월)
+        y_prev_idx = (target_year - 1 - 2023 + 39) % 60
+        y_prev_stem = self.SIXTY_GANZI[y_prev_idx][0]
+        start_stem_prev_idx = (sc.STEMS.index(y_prev_stem) * 2 + 2) % 10
+        
+        g_jan = sc.STEMS[(start_stem_prev_idx + 11) % 10] # 12번째 달(축월)
+        j_jan = sc.BRANCHES[(2 + 11) % 12] # 丑
+        wolun_list.append({
+            "month": 1, # 양력 1월로 라벨링
+            "ganzi": g_jan + j_jan,
+            "gan_kor": sc.B_KOR[g_jan],
+            "gan_elem": sc.ELEMENT_MAP[g_jan],
+            "t_gan": self._get_ten_god(me_gan, g_jan, me_elem),
+            "ji_kor": sc.B_KOR[j_jan],
+            "ji_elem": sc.ELEMENT_MAP[j_jan],
+            "t_ji": self._get_ten_god(me_gan, j_jan, me_elem),
+            "unseong": sc.UNSEONG_MAP.get(me_gan, {}).get(j_jan, "-"),
+        })
+
+        # [정렬] 12월부터 1월까지 내림차순 정렬 (오른쪽이 작은 숫자)
+        return sorted(wolun_list, key=lambda x: x['month'], reverse=True)
+    
     def _analyze_wealth_and_career(self, pillars, power, yongsin_elements):
         """재물/커리어 성공 지수 분석"""
         atg, asp = [], []
@@ -553,6 +603,8 @@ class SajuEngine:
         # 9. 현재 운세(운로) 추적
         now = datetime.now()
         curr_age = now.year - dt_raw.year + 1
+        # 현재 나이가 속한 대운 찾기
+        current_daeun = next((d for d in daeun_list if d['start_age'] <= curr_age < d['start_age'] + 10), daeun_list[0])
         current_trace = {
             "date": now.strftime("%Y-%m-%d"), "age": curr_age,
             "daeun": next((d for d in daeun_list if d['start_age'] <= curr_age < d['start_age'] + 10), daeun_list[0]),
@@ -560,7 +612,19 @@ class SajuEngine:
             "wolun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('mG', 'N/A'),
             "ilun": self.m_db.get(now.strftime("%Y%m%d"), {}).get('dG', 'N/A')
         }
-        
+        # [추가] 초기 화면에 보여줄 연운 데이터 생성 (현재 대운 기준)
+        initial_yeonun = self.get_yeonun_only(
+            birth_year=dt_raw.year,
+            daeun_start_age=current_daeun['start_age'],
+            me_gan=palja[4],
+            me_hj=palja[4] # me_hj 대신 me(palja[4])를 두 번 전달
+        )
+        initial_wolun = self.get_wolun_only(
+            target_year=now.year,
+            me_gan=palja[4],
+            me_hj=palja[4]
+        )
+
         # 10. 상호작용 분석
         interactions = self._analyze_interactions(palja)
         display_tags = [item for sublist in interactions.values() for item in sublist][:8]
@@ -657,7 +721,9 @@ class SajuEngine:
             "tengod_analysis": tengod_list,
             "forestellar_analysis": forestellar_analysis, # 통합 분석 데이터 추가
             "me_kor": me_elem_name, 
-            "relation_groups" :relation_groups
+            "relation_groups" :relation_groups,
+            "initial_yeonun": initial_yeonun,
+            "initial_wolun": initial_wolun  # 프론트엔드 초기 렌더링용
         }
         
         debug_json = json.dumps(final_result, indent=4, ensure_ascii=False, default=str)

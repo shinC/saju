@@ -116,5 +116,20 @@ async def get_yeonun(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/wolun")
+async def get_wolun(
+    target_year: int,
+    me_gan: str,
+    me_hj: str
+):
+    if engine is None:
+        raise HTTPException(status_code=500, detail="엔진 미로드")
+    try:
+        wolun_data = engine.get_wolun_only(target_year, me_gan, me_hj)
+        return wolun_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
