@@ -91,6 +91,30 @@ async def analyze_web(
             "cities": list(sc.CITY_DATA.keys()),  # 🔥 에러 페이지로 갈 때도 도시 목록을 다시 보내줘야 합니다.
             "error": f"분석 중 오류가 발생했습니다: {str(e)}"
         })
+@app.get("/api/yeonun")
+async def get_yeonun(
+    birth_year: int,
+    start_age: int,
+    me_gan: str,
+    me_hj: str
+):
+    """
+    대운 클릭 시 해당 대운의 10년치 연운(세운) 데이터를 반환하는 API
+    """
+    if engine is None:
+        raise HTTPException(status_code=500, detail="엔진이 로드되지 않았습니다.")
 
+    try:
+        # 엔진의 연운 전용 계산 메서드 호출
+        yeonun_data = engine.get_yeonun_only(
+            birth_year=birth_year,
+            daeun_start_age=start_age,
+            me_gan=me_gan,
+            me_hj=me_hj
+        )
+        return yeonun_data  # JSON 형식으로 자동 반환
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

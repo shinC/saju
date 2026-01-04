@@ -460,37 +460,38 @@
     
     <div class="flex gap-1.5 overflow-x-auto no-scrollbar pb-6 px-1">
         {% for d in result.daeun_list | reverse %}
-        <div class="flex-shrink-0 w-[58px] flex flex-col items-center">
+        <div class="daeun-item-box flex-shrink-0 w-[58px] flex flex-col items-center cursor-pointer" 
+             onclick="loadYeonun('{{ result.birth[:4] }}', {{ d.start_age }}, '{{ result.me }}', '{{ result.me }}', this)">
             
             <div class="text-[13px] font-bold text-gray-600 mb-1">{{ d.start_age }}</div>
             
             <div class="text-[11px] text-gray-500 mb-2 h-4 flex items-center justify-center">{{ d.t_gan }}</div>
             
-            <div class="w-full flex flex-col gap-1.5">
+            <div class="ganzi-container w-full flex flex-col gap-1.5 rounded-lg transition-all
+                {{ 'ring-2 ring-gray-800 ring-offset-1' if result.current_trace.daeun.start_age == d.start_age }}">
+                
                 <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 
-                    bg-{{ d.gan_elem }} {% if d.gan_elem == '금' %}border-gray-300{% endif %}
-                    {{ 'ring-2 ring-gray-800 ring-offset-1' if result.current_trace.daeun.start_age == d.start_age }}">
-                    <span class="text-[18px] font-bold {% if d.gan_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">
+                    bg-{{ d.gan_elem }} {% if d.gan_elem == '금' %}border-gray-200{% endif %}">
+                    <span class="text-[19px] font-bold {% if d.gan_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">
                         {{ d.gan_kor }}
                     </span>
-                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if d.gan_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">
+                    <span class="absolute bottom-0.5 right-1 text-[9px] font-medium {% if d.gan_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">
                         {{ d.gan }}
                     </span>
                 </div>
                 
                 <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 
-                    bg-{{ d.ji_elem }} {% if d.ji_elem == '금' %}border-gray-300{% endif %}
-                    {{ 'ring-2 ring-gray-800 ring-offset-1' if result.current_trace.daeun.start_age == d.start_age }}">
-                    <span class="text-[18px] font-bold {% if d.ji_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">
+                    bg-{{ d.ji_elem }} {% if d.ji_elem == '금' %}border-gray-200{% endif %}">
+                    <span class="text-[19px] font-bold {% if d.ji_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">
                         {{ d.ji_kor }}
                     </span>
-                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if d.ji_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">
+                    <span class="absolute bottom-0.5 right-1 text-[9px] font-medium {% if d.ji_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">
                         {{ d.ji }}
                     </span>
                 </div>
             </div>
             
-            <div class="mt-2.5 text-center flex flex-col gap-0.5">
+            <div class="mt-2.5 text-center flex flex-col gap-0.5 leading-tight">
                 <div class="text-[11px] text-gray-500 font-medium">{{ d.t_ji }}</div>
                 <div class="text-[11px] text-gray-400">{{ d.unseong }}</div>
             </div>
@@ -498,7 +499,15 @@
         {% endfor %}
     </div>
 </section>
-
+<section id="yeonun-section" class="my-12 mx-4 opacity-100 transition-opacity duration-300">
+    <div class="flex items-center justify-between mb-6 px-2">
+        <h2 class="text-xl font-bold text-gray-800 tracking-tight">연운</h2>
+        <span id="selected-daeun-text" class="text-sm text-gray-400">나이별 세운</span>
+    </div>
+    
+    <div id="yeonun-container" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-6 px-1">
+        </div>
+</section>
 <style>
     /* 포스텔러 스타일 오행 컬러 정의 */
     .bg-목 { background-color: #78aed3; } /* 청색 */
@@ -645,6 +654,67 @@
         },
         options: commonOptions
     });
+async function loadYeonun(birthYear, startAge, meGan, meHj, element) {
+    // [보더 제거 로직] 모든 대운 박스에서 하이라이트 클래스 제거
+    document.querySelectorAll('.ganzi-container').forEach(box => {
+        box.classList.remove('ring-2', 'ring-gray-800', 'ring-offset-1');
+    });
+
+    // [보더 추가 로직] 클릭된 요소 내부의 간지 컨테이너에만 테두리 추가
+    const targetBox = element.querySelector('.ganzi-container');
+    if (targetBox) {
+        targetBox.classList.add('ring-2', 'ring-gray-800', 'ring-offset-1');
+    }
+
+    try {
+        // API 호출: 연운 데이터만 가져옴
+        const url = `/api/yeonun?birth_year=${birthYear}&start_age=${startAge}&me_gan=${meGan}&me_hj=${meHj}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        // 하단 연운 섹션 업데이트
+        renderYeonunList(data);
+    } catch (error) {
+        console.error("연운 로드 실패:", error);
+    }
+}
+
+function renderYeonunList(yeonunData) {
+    const container = document.getElementById('yeonun-container');
+    if (!container) return;
+
+    let html = '';
+    yeonunData.forEach(y => {
+        // 금(金) 오행일 경우 텍스트 색상 및 보더 처리를 위한 조건
+        const isGoldGan = y.gan_elem === '금';
+        const isGoldJi = y.ji_elem === '금';
+
+        html += `
+            <div class="flex-shrink-0 w-[58px] flex flex-col items-center">
+                <div class="text-[12px] font-bold text-gray-600 mb-1">${y.year}</div>
+                
+                <div class="text-[10px] text-gray-500 mb-2 h-4 flex items-center justify-center">${y.t_gan}</div>
+                
+                <div class="w-full flex flex-col gap-1.5">
+                    <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-${y.gan_elem} ${isGoldGan ? 'border-gray-200' : ''}">
+                        <span class="text-[19px] font-bold ${isGoldGan ? 'text-gray-800' : 'text-white'}">${y.gan_kor}</span>
+                        <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${isGoldGan ? 'text-gray-400' : 'text-white/70'}">${y.ganzi[0]}</span>
+                    </div>
+                    <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 bg-${y.ji_elem} ${isGoldJi ? 'border-gray-200' : ''}">
+                        <span class="text-[19px] font-bold ${isGoldJi ? 'text-gray-800' : 'text-white'}">${y.ji_kor}</span>
+                        <span class="absolute bottom-0.5 right-1 text-[9px] font-medium ${isGoldJi ? 'text-gray-400' : 'text-white/70'}">${y.ganzi[1]}</span>
+                    </div>
+                </div>
+                
+                <div class="mt-2.5 text-center flex flex-col gap-0.5 leading-tight">
+                    <div class="text-[10px] text-gray-500 font-medium">${y.t_ji}</div>
+                    <div class="text-[10px] text-gray-400">${y.unseong}</div>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
     // 초기화
     window.onload = () => highlightInteraction('궁성');
 </script>

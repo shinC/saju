@@ -224,8 +224,11 @@ class SajuEngine:
         }
     
     def _get_ten_god(self, me, target, me_hj):
+
         """체용 변화가 적용된 FUNCTIONAL_POLARITY를 참조하여 십성을 계산합니다."""
         rel = sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[target]))
+
+        print(f"me_hj:{me_hj}, rel:{rel}")
         is_same = (sc.FUNCTIONAL_POLARITY[me] == sc.FUNCTIONAL_POLARITY[target])
         return sc.TEN_GODS_MAP.get((rel, is_same), "-")
 
@@ -332,6 +335,37 @@ class SajuEngine:
                 if sc.D_BRANCH_CHUNG.get(dj) == nb: offset += sc.INTERACTION_SCORES["branch_chung_good"] if is_jg else sc.INTERACTION_SCORES["branch_chung_bad"]
             d['score'] = max(0, min(100, int(score + offset)))
         return daeun_list
+    # SajuEngine 클래스 내부에 추가
+    def get_yeonun_only(self, birth_year, daeun_start_age, me_gan, me_hj):
+        """
+        특정 대운의 10년치 연운 데이터를 생성합니다. (누락 필드 보강)
+        """
+        yeonun_list = []
+        start_year = int(birth_year) + int(daeun_start_age) - 1
+        # [수정] 일간 한자(庚)를 오행 이름(金)으로 미리 변환
+        me_elem = sc.E_MAP_HJ.get(me_hj)
+        
+        for i in range(10):
+            target_year = start_year + i
+            ganzi_idx = (target_year - 2023 + 39) % 60
+            ganzi = self.SIXTY_GANZI[ganzi_idx]
+            g, j = ganzi[0], ganzi[1]
+            
+            yeonun_list.append({
+                "year": target_year,
+                "ganzi": ganzi,             # 한자 원문 (예: '癸')
+                "gan_kor": sc.B_KOR[g],      # 한글 (예: '계')
+                "gan_elem": sc.ELEMENT_MAP[g],
+                "t_gan": self._get_ten_god(me_gan, g, me_elem), # 천간 십성
+                "ji": j,                    # 지지 한자 원문
+                "ji_kor": sc.B_KOR[j],       # 지지 한글
+                "ji_elem": sc.ELEMENT_MAP[j],
+                "t_ji": self._get_ten_god(me_gan, j, me_elem), # 지지 십성
+                "unseong": sc.UNSEONG_MAP.get(me_gan, {}).get(j, "-"), # 12운성
+            })
+            # debug_json = json.dumps(yeonun_list, indent=4, ensure_ascii=False, default=str)
+            # print(f"\n>>> DEBUG REPORT:\n{debug_json}, -{g}, -{j}")
+        return yeonun_list[::-1] # 최신 연도가 왼쪽으로 오게 정렬
 
     def _analyze_wealth_and_career(self, pillars, power, yongsin_elements):
         """재물/커리어 성공 지수 분석"""
