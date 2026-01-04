@@ -576,9 +576,17 @@
         <button onclick="changeMonth(-1)" class="text-gray-400 hover:text-black text-xl transition-colors">◀</button>
         
         <div class="text-center">
-            <h3 id="cal-year-month" class="text-lg font-bold text-gray-800">
-                {{ result.now_year }}년 {{ result.now_month }}월
-            </h3>
+            <div class="flex items-center justify-center gap-1 text-lg font-bold text-gray-800">
+        <select id="cal-year-select" onchange="handleDateSelect()" class="bg-transparent appearance-none cursor-pointer focus:outline-none hover:text-indigo-600 transition-colors">
+            </select>
+        <span>년</span>
+        <select id="cal-month-select" onchange="handleDateSelect()" class="bg-transparent appearance-none cursor-pointer focus:outline-none ml-1 hover:text-indigo-600 transition-colors">
+            {% for m in range(1, 13) %}
+            <option value="{{ m }}">{{ m }}</option>
+            {% endfor %}
+        </select>
+        <span>월</span>
+    </div>
             
             <p id="cal-saju-header" class="text-[11px] text-gray-500 font-medium mt-1">
                 {{ result.saju_header }}
@@ -867,8 +875,9 @@ function renderCalendar(data, year, month) {
     if (!grid) return;
 
     // [수정] 양력 헤더 업데이트
-    document.getElementById('cal-year-month').innerText = `${year}년 ${month}월`;
-
+// [수정] 텍스트가 아닌 select 박스의 value를 업데이트합니다.
+    document.getElementById('cal-year-select').value = year;
+    document.getElementById('cal-month-select').value = month;
     // [추가] 사주 연도 및 월 범위(예: 을사년 무자~기축월) 업데이트
     const sajuHeader = document.getElementById('cal-saju-header');
     if (sajuHeader && data.saju_header) {
@@ -936,6 +945,26 @@ function changeMonth(offset) {
     }
     fetchCalendarData(currentCalYear, currentCalMonth);
 }
+function initYearSelect() {
+    const yearSelect = document.getElementById('cal-year-select');
+    if (!yearSelect) return;
+    
+    let options = "";
+    for (let y = 1900; y <= 2100; y++) {
+        options += `<option value="${y}">${y}</option>`;
+    }
+    yearSelect.innerHTML = options;
+}
+
+/**
+ * [추가] select 박스 값이 변경되었을 때 호출되는 함수입니다.
+ */
+function handleDateSelect() {
+    currentCalYear = parseInt(document.getElementById('cal-year-select').value);
+    currentCalMonth = parseInt(document.getElementById('cal-month-select').value);
+    
+    fetchCalendarData(currentCalYear, currentCalMonth);
+}
   
     window.onload = () => highlightInteraction('궁성');
     window.addEventListener('DOMContentLoaded', () => {
@@ -960,6 +989,10 @@ function changeMonth(offset) {
             box.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
     });
+    initYearSelect();
+    
+    // 2. 초기 달력 데이터 로드
+    fetchCalendarData(currentCalYear, currentCalMonth);
  // 초기 로드 시 서버에서 넘겨준 값이나 JS의 오늘 날짜를 사용하여 호출
     fetchCalendarData(currentCalYear, currentCalMonth);
 });
