@@ -348,7 +348,7 @@
         </div>
         {% endfor %}
     </div>
-</div>ㅉ
+</div>
 </section>
 <section class="p-6 bg-white rounded-3xl shadow-sm">
 
@@ -424,24 +424,93 @@
             </div>
         </div>
     </section>
+<div class="w-full border border-gray-200 rounded-[12px] p-5 bg-white shadow-sm">
+    <div class="flex items-center gap-6">
+        
+        {% if result.yongsin_detail.johoo_name %}
+        <div class="flex items-center">
+            <span class="text-[#e53e3e] font-bold text-[17px]">
+                {{ result.yongsin_detail.johoo_name.split('(')[0] }}
+            </span>
+            <span class="text-gray-500 text-[15px] ml-1">(조후용신)</span>
+        </div>
+        {% endif %}
 
+        <div class="flex items-center">
+            <span class="text-[#e53e3e] font-bold text-[17px]">
+                {{ result.yongsin_detail.main_yongsin.split('(')[0] }}
+            </span>
+            <span class="text-gray-500 text-[15px] ml-1">(억부용신)</span>
+        </div>
+        
+    </div>
+
+    {% if result.yongsin_detail.johoo_desc %}
+    <div class="mt-4 pt-4 border-t border-gray-50 text-[12px] text-gray-400">
+        {{ result.yongsin_detail.johoo_desc }}
+    </div>
+    {% endif %}
+</div>
     
-    <section class="p-6">
-        <h2 class="text-lg font-bold mb-4 flex justify-between items-center">
-            <span>대운 <span class="text-sm font-normal text-gray-400 ml-2">대운수 {{ result.daeun_num }}</span></span>
-        </h2>
-        <div class="flex gap-3 overflow-x-auto no-scrollbar pb-4">
-            {% for d in result.daeun_list %}
-            <div class="flex-shrink-0 w-14 text-center">
-                <div class="text-[10px] text-gray-400 mb-1">{{ d.start_age }}세</div>
-                <div class="rounded-xl border {{ 'border-blue-500 ring-1 ring-blue-500' if result.current_trace.daeun.start_age == d.start_age else 'border-gray-200' }} overflow-hidden shadow-sm">
-                    <div class="py-2 bg-gray-50 text-xs font-bold border-b">{{ d.ganzi[0] }}</div>
-                    <div class="py-2 bg-white text-xs font-bold">{{ d.ganzi[1] }}</div>
+    <section class="my-12 mx-4">
+    <div class="flex items-center justify-between mb-6 px-2">
+        <h2 class="text-xl font-bold text-gray-800 tracking-tight">대운</h2>
+        <span class="text-sm text-gray-400">대운수 {{ result.daeun_num }}</span>
+    </div>
+    
+    <div class="flex gap-1.5 overflow-x-auto no-scrollbar pb-6 px-1">
+        {% for d in result.daeun_list | reverse %}
+        <div class="flex-shrink-0 w-[58px] flex flex-col items-center">
+            
+            <div class="text-[13px] font-bold text-gray-600 mb-1">{{ d.start_age }}</div>
+            
+            <div class="text-[11px] text-gray-500 mb-2 h-4 flex items-center justify-center">{{ d.t_gan }}</div>
+            
+            <div class="w-full flex flex-col gap-1.5">
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 
+                    bg-{{ d.gan_elem }} {% if d.gan_elem == '금' %}border-gray-300{% endif %}
+                    {{ 'ring-2 ring-gray-800 ring-offset-1' if result.current_trace.daeun.start_age == d.start_age }}">
+                    <span class="text-[18px] font-bold {% if d.gan_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">
+                        {{ d.gan_kor }}
+                    </span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if d.gan_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">
+                        {{ d.gan }}
+                    </span>
+                </div>
+                
+                <div class="relative w-full aspect-square rounded-lg flex items-center justify-center shadow-sm border border-black/5 
+                    bg-{{ d.ji_elem }} {% if d.ji_elem == '금' %}border-gray-300{% endif %}
+                    {{ 'ring-2 ring-gray-800 ring-offset-1' if result.current_trace.daeun.start_age == d.start_age }}">
+                    <span class="text-[18px] font-bold {% if d.ji_elem == '금' %}text-gray-800{% else %}text-white{% endif %}">
+                        {{ d.ji_kor }}
+                    </span>
+                    <span class="absolute bottom-0.5 right-1 text-[9px] {% if d.ji_elem == '금' %}text-gray-400{% else %}text-white/70{% endif %}">
+                        {{ d.ji }}
+                    </span>
                 </div>
             </div>
-            {% endfor %}
+            
+            <div class="mt-2.5 text-center flex flex-col gap-0.5">
+                <div class="text-[11px] text-gray-500 font-medium">{{ d.t_ji }}</div>
+                <div class="text-[11px] text-gray-400">{{ d.unseong }}</div>
+            </div>
         </div>
-    </section>
+        {% endfor %}
+    </div>
+</section>
+
+<style>
+    /* 포스텔러 스타일 오행 컬러 정의 */
+    .bg-목 { background-color: #78aed3; } /* 청색 */
+    .bg-화 { background-color: #e56d6d; } /* 적색 */
+    .bg-토 { background-color: #f6b352; } /* 황색 */
+    .bg-금 { background-color: #ffffff; } /* 백색 */
+    .bg-수 { background-color: #9ba3af; } /* 흑색(회색) */
+
+    /* 가로 스크롤바 숨기기 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
 
     <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around py-3 text-[10px] text-gray-400 z-50">
         <div class="text-center text-black font-bold">🔮 사주분석</div>

@@ -97,55 +97,130 @@ class SajuEngine:
     # ==========================================================================
     # 2. 사주 핵심 연산 로직 (Core Saju Calculation)
     # ==========================================================================
-    def _calculate_power(self, palja, me_hj):
-        """포스텔러 스타일: 8글자 단순 개수 중심(각 12.5%) 점수 계산"""
-        scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
+    # def _calculate_power(self, palja, me_hj):
+    #     """포스텔러 스타일: 8글자 단순 개수 중심(각 12.5%) 점수 계산"""
+    #     scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
         
-        # 1. 오행 분포: 8글자 각각 12.5%씩 배분
+    #     # 1. 오행 분포: 8글자 각각 12.5%씩 배분
+    #     for char in palja:
+    #         elem = sc.ELEMENT_MAP[char]
+    #         scores[elem] += 12.5
+            
+    #     # 2. 신강약 세력: 나를 돕는 글자 개수 x 12.5
+    #     power = 0
+    #     for char in palja:
+    #         target_hj = sc.E_MAP_HJ[char]
+    #         if sc.REL_MAP.get((me_hj, target_hj)) in sc.STRONG_ENERGY:
+    #             power += 12.5
+                
+    #     return scores, power
+
+    # def _get_detailed_status(self, power):
+    #     """신강약 8단계 세분화"""
+    #     if power <= 15: return "극약(極弱)"
+    #     elif power <= 30: return "태약(太弱)"
+    #     elif power <= 43: return "신약(身弱)"
+    #     elif power <= 49: return "중화신약(中和身弱)"
+    #     elif power <= 56: return "중화신강(中和身强)"
+    #     elif power <= 70: return "신강(身强)"
+    #     elif power <= 85: return "태강(太强)"
+    #     else: return "극왕(極旺)"
+
+
+    def _get_element_distribution(self, palja):
+        """1. 오행 분포 계산 (단순 8글자 점유율 각 12.5%)"""
+        dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
         for char in palja:
             elem = sc.ELEMENT_MAP[char]
-            scores[elem] += 12.5
+            dist_scores[elem] += 12.5
+        return dist_scores
+
+    def _calculate_strength_score(self, palja, me_hj):
+        """
+        2. 신강약 세력(Power) 계산 (득령, 득지, 득시, 득세 가중치 적용)
+        가중치 설정: 월지(30), 일지(15), 시지(15), 년지(10), 월간/시간/년간(각 10)
+        """
+        # 위치별 가중치 정의 (합계 100)
+        # palja index: [0:년건, 1:년지, 2:월건, 3:월지, 4:일건(Me), 5:일지, 6:시건, 7:시지]
+        weights = [10, 10, 10, 30, 0, 15, 10, 15] 
+        
+        power_score = 0.0
+        
+        # 각 자리의 글자가 나를 돕는 세력(인성/비겁)인지 판별하여 가중치 합산
+        for i, char in enumerate(palja):
+            if i == 4: continue # 일간 본인은 계산 제외
             
-        # 2. 신강약 세력: 나를 돕는 글자 개수 x 12.5
-        power = 0
-        for char in palja:
             target_hj = sc.E_MAP_HJ[char]
+            # 나(me_hj)와 대상 글자의 관계가 강한 에너지(비겁/인성) 그룹에 속하는지 확인
             if sc.REL_MAP.get((me_hj, target_hj)) in sc.STRONG_ENERGY:
-                power += 12.5
+                power_score += weights[i]
                 
-        return scores, power
+        return power_score
 
     def _get_detailed_status(self, power):
-        """신강약 8단계 세분화"""
-        if power <= 15: return "극약(極弱)"
+        """신강약 8단계 세분화 (가중치 지수 기반)"""
+        if power <= 15: return "극약(極弱) - 실령, 실지, 실세 상태"
         elif power <= 30: return "태약(太弱)"
         elif power <= 43: return "신약(身弱)"
         elif power <= 49: return "중화신약(中和身弱)"
         elif power <= 56: return "중화신강(中和身强)"
         elif power <= 70: return "신강(身强)"
         elif power <= 85: return "태강(太强)"
-        else: return "극왕(極旺)"
+        else: return "극왕(極旺) - 득령, 득지, 득세 상태"
+
 
     def _get_yongsin_info(self, palja, power, me_hj_hanja):
-        """용신 분석"""
-        targets = sc.STRONG_ENERGY if power <= 49 else sc.WEAK_ENERGY
-        eokbu_type = "/".join(targets)
-        
-        needed_elements = [sc.HJ_TO_HG[hj] for hj in sc.HJ_ELEMENTS if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
+        """개선된 용신 분석: 억부, 조후, 종용신 통합"""
+        # 1. 종격(종용신) 판별
+        is_special = False
+        if power <= 15 or power >= 85:
+            is_special = True
+            counts = {}
+            for char in palja:
+                elem = sc.ELEMENT_MAP[char]
+                counts[elem] = counts.get(elem, 0) + 1
+            strongest_elem = max(counts, key=counts.get)
+            
+            main_yongsin_name = f"{strongest_elem}(종용신)"
+            needed_elements = [strongest_elem]
+            eokbu_type = "전왕/종격 (강한 기운에 순응)"
+        else:
+            # 2. 일반적인 억부용신 로직
+            targets = sc.STRONG_ENERGY if power <= 49 else sc.WEAK_ENERGY
+            eokbu_type = "/".join(targets)
+            needed_elements = [sc.HJ_TO_HG[hj] for hj in sc.HJ_ELEMENTS if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
+            main_yongsin_name = f"{needed_elements[0]}(억부용신)"
+
+        # 3. 실제 원국 내 존재 확인
         present_hj = set(sc.E_MAP_HJ[c] for c in palja)
-        existing_yongsin = [sc.HJ_TO_HG[hj] for hj in present_hj if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
+        existing_yongsin = [sc.HJ_TO_HG[hj] for hj in present_hj if sc.HJ_TO_HG[hj] in needed_elements]
         
-        mb, johoo = palja[3], "필요 없음 (중화)"
-        if mb in sc.WINTER_BS: johoo = "화(火) - 추운 계절이라 따뜻한 기운이 최우선입니다."
-        elif mb in sc.SUMMER_BS: johoo = "수(水) - 더운 계절이라 시원한 기운이 최우선입니다."
-        elif mb in sc.SPRING_BS: johoo = "화(火) - 만물이 성장하도록 온기가 필요합니다."
-        elif mb in sc.AUTUMN_BS: johoo = "수(水) - 건조한 계절이라 적절한 수기가 필요합니다."
+        # 4. 조후 분석 (출력 형식 수정 및 설명 문구 분리)
+        mb = palja[3]
+        johoo_name = ""
+        johoo_desc = ""
+
+        if mb in sc.WINTER_BS:
+            johoo_name = "화(조후용신)"
+            johoo_desc = "화(火) - 추운 계절이라 따뜻한 기운이 최우선입니다."
+        elif mb in sc.SUMMER_BS:
+            johoo_name = "수(조후용신)"
+            johoo_desc = "수(水) - 더운 계절이라 시원한 기운이 최우선입니다."
+        elif mb in sc.SPRING_BS:
+            johoo_name = "화(조후용신)"
+            johoo_desc = "화(火) - 만물이 성장하도록 온기가 필요합니다."
+        elif mb in sc.AUTUMN_BS:
+            johoo_name = "수(조후용신)"
+            johoo_desc = "수(水) - 건조한 계절이라 적절한 수기가 필요합니다."
 
         return {
-            "eokbu_elements": "/".join(needed_elements),
-            "actual_yongsin": "/".join(existing_yongsin) if existing_yongsin else "원국 내 없음 (운에서 보완 필요)",
+            "eokbu_elements": "/".join(needed_elements), 
+            "main_yongsin": main_yongsin_name,  # 예: "토(억부용신)"
+            "johoo_name": johoo_name,          # 예: "화(조후용신)"
+            "johoo_desc": johoo_desc,          # 예: "화(火) - 추운 계절이라..."
+            "actual_yongsin": "/".join(existing_yongsin) if existing_yongsin else "원국 내 없음",
             "eokbu_type": eokbu_type, 
-            "johoo": johoo
+            "is_special": is_special
         }
     
     def _get_ten_god(self, me, target, me_hj):
@@ -205,15 +280,35 @@ class SajuEngine:
     # ==========================================================================
     # 3. 대운 및 환경 분석 (Luck & Environment Analysis)
     # ==========================================================================
-    def _calculate_daeun(self, dt_in, yG, mG, gender, l_term, n_term):
-        """대운수 및 경로 계산"""
+    def _calculate_daeun(self, dt_in, yG, mG, gender, l_term, n_term, me, me_hj):
+        """대운수 및 상세 정보(이미지 스타일) 계산"""
         is_fwd = (gender == 'M' and sc.POLARITY_MAP[yG[0]] == '+') or (gender == 'F' and sc.POLARITY_MAP[yG[0]] == '-')
         target_term = n_term if is_fwd else l_term
         daeun_num = max(1, int(round(abs((target_term['dt_obj'] - dt_in).total_seconds() / 86400) / 3.0)))
-        daeun_list, curr_idx = [], self.SIXTY_GANZI.index(mG)
-        for i in range(1, 12):
+        
+        daeun_list = []
+        curr_idx = self.SIXTY_GANZI.index(mG)
+        
+        # 이미지처럼 보통 10개 혹은 11개의 대운을 보여줍니다.
+        for i in range(1, 11):
             curr_idx = (curr_idx + 1) % 60 if is_fwd else (curr_idx - 1) % 60
-            daeun_list.append({"start_age": daeun_num + (i-1)*10, "ganzi": self.SIXTY_GANZI[curr_idx]})
+            ganzi = self.SIXTY_GANZI[curr_idx]
+            g, j = ganzi[0], ganzi[1]
+            
+            daeun_list.append({
+                "start_age": daeun_num + (i-1)*10,
+                "ganzi": ganzi,
+                "gan": g,
+                "gan_kor": sc.B_KOR[g],
+                "gan_elem": sc.ELEMENT_MAP[g],
+                "t_gan": self._get_ten_god(me, g, me_hj), # 천간 십성
+                "ji": j,
+                "ji_kor": sc.B_KOR[j],
+                "ji_elem": sc.ELEMENT_MAP[j],
+                "t_ji": self._get_ten_god(me, j, me_hj), # 지지 십성
+                "unseong": sc.UNSEONG_MAP.get(me, {}).get(j, "-"), # 12운성
+            })
+            
         return daeun_num, daeun_list
 
     def _calculate_daeun_scores(self, daeun_list, yongsin_info, palja):
@@ -408,7 +503,9 @@ class SajuEngine:
         
         # 7. 오행/신강약 분석
         me_hj = sc.E_MAP_HJ.get(palja[4]) 
-        scores, power = self._calculate_power(palja, me_hj)
+         # 오행 분포(단순 개수)와 신강약 지수(가중치)를 각각 구함
+        scores = self._get_element_distribution(palja)
+        power = self._calculate_strength_score(palja, me_hj)
         yongsin, pillars = self._get_yongsin_info(palja, power, me_hj), self._investigate_sinsal(palja, palja[4], me_hj)
         
         for p in pillars: 
@@ -416,7 +513,7 @@ class SajuEngine:
         
         # 8. 대운 계산
         l_term, n_term = self._get_solar_terms(dt_raw)
-        daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term)
+        daeun_num, daeun_list = self._calculate_daeun(dt_raw, yG, mG, gender, l_term, n_term, palja[4], me_hj)
         daeun_list = self._calculate_daeun_scores(daeun_list, yongsin, palja)
         
         # 9. 현재 운세(운로) 추적
