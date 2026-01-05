@@ -137,92 +137,87 @@ class SajuEngine:
 
     def _calculate_strength_score(self, palja, me_hj):
         """
-        [최종 확정판] 정밀 튜닝된 신강약 세력(Power) 계산 로직
-        1. 득령(월령): 계절 가중치 밸런싱 (30점 기준) 및 중복 방지
-        2. 득지(통근): '강한 오행'일 때만 보너스 합산하여 과다 누적 방지
-        3. 득세(머릿수): 일간/월지 제외 순수 주변 세력 및 억제 세력(-5.0) 감점 로직
-        4. 합(Hap) 매칭: '목' in '목국' 형태의 문자열 비교 오류 수정
+        [인플레이션 & 마이너스 방지판] 
+        위치별 가중치 대비 비중(Ratio)으로 계산하여 0~100 사이의 중화된 점수를 산출합니다.
         """
-        # 일간 오행 (예: '금')
         me_elem = sc.ELEMENT_MAP[palja[4]]
-        power_score = 0.0
-
-        # --- 1. 득령(得令) 분석: 월지 계절 가중치 (30점 기준) ---
-        wol_hj = sc.E_MAP_HJ[palja[3]]
-        rel_wol = sc.REL_MAP.get((me_hj, wol_hj))
         
-        if rel_wol in ["비견", "겁재"]: 
-            power_score += 30.0  # 왕(旺): 35점에서 30점으로 하향 조정
-        elif rel_wol in ["편인", "정인"]: 
-            power_score += 22.0  # 상(相)
-        elif rel_wol in ["식신", "상관"]: 
-            power_score += 8.0   # 휴(休)
-
-        # --- 2. 득지(得地) 및 통근 분석: 중복 제거 및 감점 반영 ---
-        # 지지 가중치: 일지(15), 시지(15), 년지(10)
-        ji_indices = {5: 15.0, 7: 15.0, 1: 10.0}
+        # 1. 위치별 고정 가중치 설정 (합계 100점)
+        weights = {
+            3: 30.0,  # 월지 (득령)
+            5: 15.0,  # 일지 (득지)
+            7: 15.0,  # 시지
+            1: 10.0,  # 년지
+            0: 10.0,  # 년간 (득세)
+            2: 10.0,  # 월간 (득세)
+            6: 10.0   # 시간 (득세)
+        }
         
-        for idx, weight in ji_indices.items():
+        # 기본 점수 설정 (일간 본인의 최소 존재감 10점 부여 -> 마이너스 방지)
+        strong_sum = 10.0 
+        total_presence = 110.0 # 분모 (기본 10 + 가중치 합 100)
+
+        # 2. 각 위치별 기운 합산
+        for idx, weight in weights.items():
             char = palja[idx]
             target_hj = sc.E_MAP_HJ[char]
             relation = sc.REL_MAP.get((me_hj, target_hj))
             
-            # [수정] 나를 돕는 오행인 경우에만 기본 점수와 통근 보너스 합산
             if relation in sc.STRONG_ENERGY:
-                power_score += weight
-                # 통근 보너스: 내 글자가 지장간에 실제로 뿌리를 내린 경우만 가산
+                # 나를 돕는 오행(비겁/인성)인 경우 분자에 합산
+                strong_sum += weight
+                
+                # 통근 보너스: 뿌리가 있으면 강도 가산 (분자와 분모 모두 증가)
                 if palja[4] in sc.JIJANGAN_MAP.get(char, ""):
-                    power_score += (weight * 0.3)
-            # [수정] 내 힘을 빼는 오행(재/관/식)인 경우 감점 부여
-            elif relation in sc.WEAK_ENERGY:
-                power_score -= 5.0
+                    bonus = weight * 0.3
+                    strong_sum += bonus
+                    total_presence += bonus
+            else:
+                # 나를 돕지 않는 오행(식/재/관)인 경우 분자에는 더하지 않음
+                # 감점 대신 '비중 감소' 효과를 통해 점수를 낮춤
+                pass
 
-        # --- 3. 득세(得勢) 분석: 천간 가중치 및 억제 세력 반영 ---
-        # 천간 가중치: 년간(10), 월간(10), 시간(10)
-        for idx in [0, 2, 6]:
-            char = palja[idx]
-            target_hj = sc.E_MAP_HJ[char]
-            relation = sc.REL_MAP.get((me_hj, target_hj))
-            
-            if relation in sc.STRONG_ENERGY:
-                power_score += 10.0
-            elif relation in sc.WEAK_ENERGY:
-                power_score -= 5.0 # 천간 억제 세력 감점
-
-        # --- 4. 머릿수 보정: 일간(4) 및 월지(3)를 제외한 순수 주변 세력 ---
-        strong_count = sum(
-            1 for i, char in enumerate(palja)
-            if i not in [3, 4] and # 일간 본인과 이미 계산된 월지 제외
-            sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[char])) in sc.STRONG_ENERGY
-        )
-        
-        if strong_count >= 4: 
-            power_score += 10.0
-        elif strong_count <= 1: 
-            power_score -= 10.0
-
-        # --- 5. 합(Hap)의 득세 반영: 문자열 비교 로직 수정 (me_elem in val) ---
+        # 3. 합(Hap) 분석: 내 오행과 같은 세력이 형성될 때만 가산
         bl = [palja[1], palja[3], palja[5], palja[7]]
         
-        # 지지삼합 분석
-        for key, (val, king) in sc.B_SAMHAP.items():
-            match_indices = [b for b in bl if b in key]
-            # [수정] '목' in '목국'은 True이므로 안전하게 매칭됨
-            if len(set(match_indices)) >= 3 and me_elem in val:
-                power_score += 15.0
-            elif len(set(match_indices)) == 2 and king in bl and me_elem in val:
-                power_score += 7.0
+        # 지지삼합/방합 통합 처리
+        hap_rules = list(sc.B_SAMHAP.items()) + list(sc.B_BANGHAP.items())
+        for key, val_info in hap_rules:
+            # 삼합은 (결과오행, 왕지) 튜플이고 방합은 결과오행 문자열임
+            res_elem = val_info[0] if isinstance(val_info, tuple) else val_info
+            
+            if me_elem == res_elem: # 형성된 합의 기운이 내 오행과 같을 때
+                match_indices = [b for b in bl if b in key]
+                if len(set(match_indices)) >= 3:
+                    strong_sum += 15.0
+                    total_presence += 15.0
+                elif len(set(match_indices)) == 2:
+                    # 삼합의 경우 왕지 포함 여부 확인 (방합은 단순 2글자)
+                    is_special = True
+                    if isinstance(val_info, tuple): # 삼합일 때
+                        king = val_info[1]
+                        if king not in bl: is_special = False
+                    
+                    if is_special:
+                        strong_sum += 7.0
+                        total_presence += 7.0
+
+        # 4. 머릿수 보정 (세력의 집중도 반영)
+        strong_count = sum(1 for i, char in enumerate(palja) 
+                          if i not in [3, 4] and 
+                          sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[char])) in sc.STRONG_ENERGY)
         
-        # 지지방합 분석
-        for key, val in sc.B_BANGHAP.items():
-            match_indices = [b for b in bl if b in key]
-            if len(set(match_indices)) >= 3 and me_elem in val:
-                power_score += 15.0
-            elif len(set(match_indices)) == 2 and me_elem in val:
-                power_score += 7.0
-        print(f"power_score{power_score}")
-        # 최종 점수 정규화 (0~100점 사이 제한)
-        return max(0, min(100, int(power_score)))
+        if strong_count >= 5: strong_sum += 5.0
+        elif strong_count <= 1: strong_sum -= 5.0 # 최약 사주 보정
+
+        # 5. 최종 점수 계산 (비중 기준 % 산출)
+        # (나를 돕는 힘 / 전체 존재감) * 100
+        final_score = (strong_sum / total_presence) * 100
+        
+        print(f"Calculated Power Score: {final_score:.2f}")
+        
+        # 최소 5점, 최대 100점 제한
+        return max(5, min(100, int(final_score)))
 
     def _get_detailed_status(self, power):
         """신강약 8단계 세분화 (가중치 지수 기반)"""
@@ -554,15 +549,37 @@ class SajuEngine:
 
         # 결과값 중복 제거 및 가나다순 정렬
         unique_res = {}
+        pos_names = ["년", "월", "일", "시"] # 위치 명칭 정의
+
         for k, v in res.items():
-            seen, unique_list = set(), []
+            # 1. 이름별로 그룹화하여 위치(subs)를 합침
+            combined = {}
             for item in v:
-                if item["name"] not in seen: 
-                    unique_list.append(item)
-                    seen.add(item["name"])
-            unique_res[k] = sorted(unique_list, key=lambda x: x["name"])
-        
-        print(f"\n>>> DEBUG REPORT:\n  unique_res : {unique_res} ")
+                name = item["name"]
+                if name not in combined:
+                    combined[name] = set(item["subs"]) # set으로 중복 위치 방지
+                else:
+                    combined[name].update(item["subs"]) # 새로운 위치 인덱스 추가
+
+            # 2. 합쳐진 위치를 바탕으로 표시용 이름 생성
+            final_list = []
+            for name, subs_set in combined.items():
+                sorted_subs = sorted(list(subs_set)) # 인덱스 정렬 [0, 2, 3]
+                
+                # 위치 명칭 추출 (예: "년-일-시")
+                loc_str = "-".join([pos_names[i] for i in sorted_subs])
+                
+                # 표시용 이름 결정: 2개 이상 중첩되면 위치를 병기함
+                display_name = f"{name}({loc_str})" if len(sorted_subs) > 2 else name
+                
+                final_list.append({
+                    "name": display_name,     # 화면 표시용 (예: 자묘형(년-일-시))
+                    "pure_name": name,        # 순수 명칭 (해석 데이터 매칭용)
+                    "subs": sorted_subs       # 하이라이트할 모든 인덱스 [0, 2, 3]
+                })
+
+            # 가나다순 정렬하여 저장
+            unique_res[k] = sorted(final_list, key=lambda x: x["name"])
         return unique_res
 
     def _check_group_interactions(self, bl, res):
@@ -729,18 +746,31 @@ class SajuEngine:
         # 4. [절기 보정] 입절 시각을 정밀 비교하여 월건(mG) 확정
         yG, mG = self._apply_solar_correction(dt_raw, day_data['yG'], day_data['mG'])
         
-        # 5. 시주(hG) 및 일주(dG) 결정
+        # 5. [수정] 시주 및 일주 결정 (경도 보정값 반영)
         h_idx = ((dt_solar.hour * 60 + dt_solar.minute + 60) // 120) % 12
-        input_day_data = self.m_db.get(dt_raw.strftime("%Y%m%d"))
-        target_dG = self.m_db.get((dt_solar + timedelta(hours=2)).strftime("%Y%m%d"))['dG'] if (use_yajas_i and jasi == "YAJAS-I") else input_day_data['dG']
         
-        hG_gan = sc.STEMS[(sc.HG_START_IDX[target_dG[0]] + h_idx) % 10]
+        # [중요] 모든 기준 날짜를 보정된 dt_solar의 날짜로 고정합니다.
+        solar_date_str = dt_solar.strftime("%Y%m%d")
+        next_solar_date_str = (dt_solar + timedelta(days=1)).strftime("%Y%m%d")
+        
+        curr_day_data = self.m_db.get(solar_date_str)
+        next_day_data = self.m_db.get(next_solar_date_str)
+
+        if jasi == "YAJAS-I":
+            # 야자시(23:00~): 날짜는 오늘(12/31), 시주 기준은 내일(1/1)
+            target_dG = curr_day_data['dG'] if use_yajas_i else next_day_data['dG']
+            ref_gan = next_day_data['dG'][0]
+        else:
+            # 조자시 포함 일반 시간: 날짜와 시주 기준 모두 현재 보정된 날짜
+            target_dG = curr_day_data['dG']
+            ref_gan = target_dG[0]
+
+        # 최종 시주 천간 계산
+        hG_gan = sc.STEMS[(sc.HG_START_IDX[ref_gan] + h_idx) % 10]
         
         # 6. [데이터 동기화] 8글자(palja) 구성
         palja = [yG[0], yG[1], mG[0], mG[1], target_dG[0], target_dG[1], hG_gan, sc.BRANCHES[h_idx]]
-        print(f"\n>>> palja:\n{palja}")
-
-        
+                
         # 7. 오행/신강약 분석
         me_hj = sc.E_MAP_HJ.get(palja[4]) 
          # 오행 분포(단순 개수)와 신강약 지수(가중치)를 각각 구함
@@ -836,13 +866,44 @@ class SajuEngine:
         max_score_val = max(scores.values())
         winners = [k for k, v in scores.items() if v == max_score_val]
         
-        representative_elem = me_elem_name if me_elem_name in winners else winners[0]
+        #representative_elem = me_elem_name if me_elem_name in winners else winners[0]
         # 2. [신규 추가] 대표 성향(십성) 추출
         # tengod_dict에서 가장 count가 높은 십성 이름을 찾습니다.
         # 본인(비견) 세력이 강한 경우 '비견'이 대표 성향으로 잡히게 됩니다.
-        representative_tendency = max(tengod_dict, key=lambda k: (tengod_dict[k]['count'], k == "비견"))
+        # representative_tendency = max(tengod_dict, key=lambda k: (tengod_dict[k]['count'], k == "비견"))
       
         
+        representative_elem = max(scores, key=scores.get)
+
+        # 2. 대표 성향: 십성을 5개 그룹(비겁, 식상...)으로 합산 후 판정
+        # (sc.TEN_GOD_GROUPS 상수가 정의되어 있다고 가정합니다)
+        group_counts = {"비겁": 0, "식상": 0, "재성": 0, "관성": 0, "인성": 0}
+        group_mapping = {
+            "비견": "비겁", "겁재": "비겁", "본인": "비겁",
+            "식신": "식상", "상관": "식상",
+            "편재": "재성", "정재": "재성",
+            "편관": "관성", "정관": "관성",
+            "편인": "인성", "정인": "인성"
+        }
+
+        for p in pillars:
+            group_counts[group_mapping.get(p['t_gan'], "비겁")] += 1
+            group_counts[group_mapping.get(p['t_ji'], "비겁")] += 1
+
+        # 가장 비중이 큰 그룹을 찾음 (예: 관성)
+        representative_group_name = max(group_counts, key=group_counts.get)
+        
+        # 해당 그룹에 속하는 십성 중 원국에 가장 많은 것 선택
+        group_to_tgs = {
+            "비겁": ["비견", "겁재"], "식상": ["식신", "상관"],
+            "재성": ["편재", "정재"], "관성": ["편관", "정관"], "인성": ["편인", "정인"]
+        }
+        target_tgs = group_to_tgs[representative_group_name]
+        representative_tendency = max(target_tgs, key=lambda k: (tengod_dict.get(k, {'count': 0})['count']))
+        
+
+
+
     
         # 12. 최종 결과 조립
         final_result = {
