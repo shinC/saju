@@ -246,15 +246,21 @@
     <h2 class="text-xl font-bold text-gray-800 mb-6">오행과 십성 분석</h2>
     
     <div class="flex flex-col gap-2 mb-10 text-xs text-gray-400">
-        <label class="flex items-center gap-2">
-            <input type="checkbox" class="rounded-sm border-gray-300" checked disabled> 
-            합에 따른 오행 변화 적용 <span class="text-[10px] bg-gray-100 p-1 rounded-full text-gray-400">?</span>
-        </label>
-        <label class="flex items-center gap-2">
-            <input type="checkbox" class="rounded-sm border-gray-300" checked disabled> 
-            조후와 궁성 보정값 적용 <span class="text-[10px] bg-gray-100 p-1 rounded-full text-gray-400">?</span>
-        </label>
-    </div>
+    <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="hap-check" onchange="updateAnalysis()" class="rounded-sm border-gray-300"> 
+        합에 따른 오행 변화 적용 
+        <span class="text-[10px] bg-gray-100 p-1 rounded-full text-gray-400">?</span>
+    </label>
+    <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="johoo-check" onchange="updateAnalysis()" class="rounded-sm border-gray-300"> 
+        조후와 궁성 보정값 적용 
+        <span class="text-[10px] bg-gray-100 p-1 rounded-full text-gray-400">?</span>
+    </label>
+</div>
+
+<input type="hidden" id="birth-val" value="{{ result.birth }}">
+<input type="hidden" id="gender-val" value="{{ result.gender }}">
+<input type="hidden" id="location-val" value="{{ result.location_name }}">
 
    <div class="max-w-5xl mx-auto px-4 py-8">
     
@@ -956,6 +962,215 @@ function initYearSelect() {
     yearSelect.innerHTML = options;
 }
 
+// 1. 차트 인스턴스를 전역 변수로 관리하여 어디서든 접근 가능하게 합니다.
+let elementChart = null;
+let tengodChart = null;
+
+/**
+ * 페이지 로드 시 차트를 초기화합니다.
+ */
+function initCharts() {
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false } },
+        cutout: '78%',
+        animation: { animateScale: true, animateRotate: true }
+    };
+
+    // --- 1. 오행 차트 초기화 ---
+    const elCanvas = document.getElementById('elementDoughnutChart');
+    if (elCanvas) {
+        // [필살기] 해당 캔버스에 이미 그려진 차트가 있는지 Chart.js에게 직접 물어봅니다.
+        const existingChart = Chart.getChart(elCanvas); 
+        if (existingChart) {
+            existingChart.destroy(); // 존재한다면 무조건 파괴
+        }
+        
+        elementChart = new Chart(elCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['목', '화', '토', '금', '수'],
+                datasets: [{
+                    data: [{{ result.scores['목'] }}, {{ result.scores['화'] }}, {{ result.scores['토'] }}, {{ result.scores['금'] }}, {{ result.scores['수'] }}],
+                    backgroundColor: ['#16a34a', '#dc2626', '#a16207', '#6b7280', '#2563eb'],
+                    borderWidth: 0
+                }]
+            },
+            options: commonOptions
+        });
+    }
+
+    // --- 2. 십성 차트 초기화 ---
+    const tgCanvas = document.getElementById('tengodDoughnutChart');
+    if (tgCanvas) {
+        // [필살기] 십성 차트도 동일하게 캔버스 기반으로 파괴 체크
+        const existingTgChart = Chart.getChart(tgCanvas);
+        if (existingTgChart) {
+            existingTgChart.destroy();
+        }
+
+        const tgOrder = ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"];
+        const tgData = {{ result.tengod_analysis | tojson }};
+        const tgValues = tgOrder.map(name => {
+            const found = tgData.find(d => d.name === name);
+            return found ? parseFloat(found.ratio.replace('%', '')) : 0;
+        });
+        
+        tengodChart = new Chart(tgCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: tgOrder,
+                datasets: [{
+                    data: tgValues,
+                    backgroundColor: ['#4ade80', '#22c55e', '#f87171', '#ef4444', '#facc15', '#eab308', '#9ca3af', '#6b7280', '#60a5fa', '#3b82f6'],
+                    borderWidth: 0
+                }]
+            },
+            options: commonOptions
+        });
+    }
+}/**
+ * 체크박스 변경 시 호출되는 비동기 업데이트 함수
+ */
+async function updateAnalysis() {
+    // 1. 체크박스 상태 확인
+    const useHap = document.getElementById('hap-check').checked;
+    const useJohoo = document.getElementById('johoo-check').checked;
+    
+    // 2. 분석용 기본 파라미터 (템플릿 변수에서 가져옴)
+    const params = new URLSearchParams({
+        birth: "{{ result.birth }}",
+        gender: "{{ result.gender }}",
+        location: "{{ result.location_name }}",
+        use_hap: useHap,
+        use_johoo: useJohoo
+    });
+
+    try {
+        const response = await fetch(`/api/re-analyze?${params.toString()}`);
+        const data = await response.json();
+        
+        console.log("서버 응답 데이터:", data); // [디버그] 데이터가 잘 오는지 확인
+
+        if (data.error) {
+            console.error("서버 에러 발생:", data.error);
+            return;
+        }
+
+        // --- 3. 오행 그래프 업데이트 ---
+        // 전역 변수가 비었을 경우 캔버스에서 직접 차트를 찾아옵니다.
+        if (!elementChart) elementChart = Chart.getChart("elementDoughnutChart");
+        
+        if (elementChart && data.scores) {
+            elementChart.data.datasets[0].data = ['목', '화', '토', '금', '수'].map(l => data.scores[l] || 0);
+            elementChart.update();
+        } else {
+            console.warn("오행 차트 객체를 찾을 수 없거나 데이터가 없습니다.");
+        }
+
+        // --- 4. 십성 그래프 업데이트 ---
+        if (!tengodChart) tengodChart = Chart.getChart("tengodDoughnutChart");
+        
+        if (tengodChart && data.tengod_counts) {
+            const tgOrder = ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"];
+            tengodChart.data.datasets[0].data = tgOrder.map(l => data.tengod_counts[l] || 0);
+            tengodChart.update();
+        }
+
+        // --- 5. 상세 테이블(Forestellar) 업데이트 ---
+        // 테이블을 감싸고 있는 정확한 컨테이너를 찾습니다.
+        const tableContainer = document.querySelector('section.my-12 .bg-white.rounded-xl.shadow-sm .divide-y');
+        
+        if (tableContainer && data.forestellar_analysis) {
+            tableContainer.innerHTML = data.forestellar_analysis.map(row => `
+                <div class="grid grid-cols-2">
+                    <div class="p-4 border-r border-gray-100 flex flex-col justify-center items-center">
+                        <div class="text-base font-bold mb-1 text-${getElementColorClass(row.elem_name)}">${row.elem_name}</div>
+                        <div class="text-xs text-gray-500">${row.score} <span class="px-1.5 py-0.5 rounded-md bg-gray-100 text-[10px]">${row.status}</span></div>
+                    </div>
+                    <div class="p-4 flex flex-col justify-center space-y-2 text-xs">
+                        <div class="flex justify-between items-center h-5">
+                            <span class="text-gray-700">${row.tg1_name}</span>
+                            <span class="font-mono text-gray-400">${row.tg1_ratio}</span>
+                        </div>
+                        <div class="flex justify-between items-center h-5 border-t border-dotted border-gray-200 pt-1">
+                            <span class="text-gray-700">${row.tg2_name}</span>
+                            <span class="font-mono text-gray-400">${row.tg2_ratio}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            console.warn("테이블 컨테이너를 찾을 수 없습니다. HTML 구조를 확인하세요.");
+        }
+
+        // --- 6. 신강약 및 펜타곤 업데이트 ---
+        updateRelationNodes(data.relation_groups);
+        
+        const powerStatus = document.getElementById('power-status-text');
+        const powerIndicator = document.getElementById('power-indicator');
+        if (powerStatus) powerStatus.innerText = `${data.status}(${data.power})`;
+        if (powerIndicator) powerIndicator.style.left = `${data.power}%`;
+
+    } catch (e) {
+        console.error("업데이트 실행 중 오류:", e);
+    }
+}/**
+ * 오행 관계도(펜타곤)의 노드 수치와 배경 높이를 업데이트합니다.
+ */
+/**
+ * 수정된 updateRelationNodes 함수
+ */
+function updateRelationNodes(groups) {
+    if (!groups) return;
+
+    groups.forEach((group, idx) => {
+        const node = document.querySelector(`.node-pos-${idx}`);
+        if (node) {
+            // [수정] .text-[18px] -> .text-\\[18px\\] 로 변경하여 이스케이프 처리
+            const scoreSpan = node.querySelector('.text-\\[18px\\]');
+            if (scoreSpan) scoreSpan.innerText = group.score;
+
+            const bgFill = node.querySelector('.absolute.bottom-0');
+            if (bgFill) bgFill.style.height = `${group.percent}%`;
+        }
+    });
+}
+/**
+ * 오행과 십성 분석 상세 표의 내용을 업데이트합니다.
+ */
+function updateForestellarTable(analysis) {
+    const container = document.querySelector('.divide-y.divide-gray-100');
+    if (!container || !analysis) return;
+
+    container.innerHTML = analysis.map(row => `
+        <div class="grid grid-cols-2">
+            <div class="p-4 border-r border-gray-100 flex flex-col justify-center items-center">
+                <div class="text-base font-bold mb-1 text-${getElementColorClass(row.elem_name)}">${row.elem_name}</div>
+                <div class="text-xs text-gray-500">${row.score} <span class="px-1.5 py-0.5 rounded-md bg-gray-100 text-[10px]">${row.status}</span></div>
+            </div>
+            <div class="p-4 flex flex-col justify-center space-y-2 text-xs">
+                <div class="flex justify-between items-center h-5"><span class="text-gray-700">${row.tg1_name}</span><span class="text-gray-400">${row.tg1_ratio}</span></div>
+                <div class="flex justify-between items-center h-5 border-t border-dotted border-gray-200 pt-1"><span class="text-gray-700">${row.tg2_name}</span><span class="text-gray-400">${row.tg2_ratio}</span></div>
+            </div>
+        </div>
+    `).join('');
+}
+/**
+ * 오행 이름을 받아 해당하는 Tailwind CSS 컬러 클래스 문자열을 반환합니다.
+ */
+function getElementColorClass(elem) {
+    const colorMap = {
+        '목': 'green-600',
+        '화': 'red-600',
+        '토': 'yellow-700',
+        '금': 'gray-500',
+        '수': 'blue-600'
+    };
+    // 매칭되는 오행이 없을 경우 기본값으로 gray-500을 반환합니다.
+    return colorMap[elem] || 'gray-500';
+}
 /**
  * [추가] select 박스 값이 변경되었을 때 호출되는 함수입니다.
  */
@@ -995,6 +1210,8 @@ function handleDateSelect() {
     fetchCalendarData(currentCalYear, currentCalMonth);
  // 초기 로드 시 서버에서 넘겨준 값이나 JS의 오늘 날짜를 사용하여 호출
     fetchCalendarData(currentCalYear, currentCalMonth);
+    initCharts();
+    highlightInteraction('궁성');
 });
 </script>
 </html>

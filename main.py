@@ -69,7 +69,10 @@ async def analyze_web(
             use_yajas_i=use_yajas_i,
             calendar_type=calendar_type
         )
-
+        if "error" in result:
+            print(f"분석 실패: {result['error']}")
+        else:
+            print(f"분석 성공: {result['ilju']}")
         # 3. 엔진이 모르는 사용자 '이름' 정보만 결과에 추가
         result['name'] = name
 
@@ -138,6 +141,67 @@ async def get_calendar(year: int, month: int):
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+@app.get("/api/re-analyze")
+def re_analyze(request: Request):
+    """
+    Starlette/FastAPI의 기본 호출 방식에 맞춰 인자를 request 하나만 받습니다.
+    모든 데이터는 request.query_params에서 직접 추출하여 인자 불일치 에러를 방지합니다.
+    """
+    try:
+        # 1. URL 쿼리 파라미터에서 데이터 추출
+        params = request.query_params
+        birth = params.get('birth')
+        gender = params.get('gender')
+        location = params.get('location')
+        
+        # 체크박스 값은 문자열로 들어오므로 불린(Boolean)으로 변환합니다.
+        use_hap = params.get('use_hap', 'false').lower() == 'true'
+        use_johoo = params.get('use_johoo', 'false').lower() == 'true'
+
+        # 2. 필수 값이 누락되었는지 확인
+        if not all([birth, gender, location]):
+            return {"error": "필수 분석 정보(생년월일, 성별, 지역)가 누락되었습니다."}
+
+        # 3. 엔진 분석 실행
+        # 사용자님이 작성하신 analyze 함수 규격에 맞춰 인자를 전달합니다.
+        result = engine.analyze(
+            birth_str=birth, 
+            gender=gender, 
+            location=location, 
+            use_yajas_i=True, 
+            calendar_type="양력",
+            use_hap_correction=use_hap, 
+            use_johoo_correction=use_johoo
+        )
+
+        if "error" in result:
+            return {"error": result["error"]}
+
+        # 4. 프론트엔드 JS가 요구하는 형식으로 데이터 가공
+        # 십성 비중 계산 시 딕셔너리 데이터를 안전하게 참조합니다.
+        tengod_counts = {}
+        tg_dict = result.get('tengod_analysis_dict', {})
+        for k, v in tg_dict.items():
+            # '-' 표시가 아닐 경우에만 비율 숫자를 추출합니다.
+            tengod_counts[k] = float(v['ratio'].replace('%', '')) if v.get('ratio') != '-' else 0
+
+        return {
+            "scores": result["scores"],
+            "power": result["power"],
+            "status": result["status"],
+            "representative_elem": result["representative_elem"],
+            "representative_tendency": result["representative_tendency"],
+            "forestellar_analysis": result["forestellar_analysis"],
+            "relation_groups": result["relation_groups"],
+            "tengod_counts": tengod_counts
+        }
+
+    except Exception as e:
+        print(f"상세 에러 로그: {e}")
+        return {"error": f"서버 내부 오류: {str(e)}"}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -15,7 +15,6 @@ class SajuEngine:
     def _parse_and_convert_to_solar(self, birth_str, calendar_type):
         """입력된 날짜를 파싱하고, 음력/윤달일 경우 양력으로 역산합니다."""
         dt_input = datetime.strptime(birth_str, "%Y-%m-%d %H:%M")
-        
         if calendar_type in ["음력", "음력(윤달)"]:
             i_y, i_m, i_d = dt_input.year, dt_input.month, dt_input.day
             is_leap = (calendar_type == "음력(윤달)")
@@ -127,96 +126,118 @@ class SajuEngine:
     #     else: return "극왕(極旺)"
 
 
-    def _get_element_distribution(self, palja):
-        """1. 오행 분포 계산 (단순 8글자 점유율 각 12.5%)"""
+    def _get_element_distribution(self, palja, use_hap_correction=False):
+        """오행 분포 계산 (합에 따른 오행 변화 옵션 반영)"""
         dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
-        for char in palja:
-            elem = sc.ELEMENT_MAP[char]
+        
+        # 1. 기본 오행 리스트 추출
+        effective_elements = [sc.ELEMENT_MAP[char] for char in palja]
+        
+        # 2. 합(Hap) 적용 시 오행 변환
+        if use_hap_correction:
+            bl = [palja[1], palja[3], palja[5], palja[7]] # 지지
+            hap_rules = list(sc.B_SAMHAP.items()) + list(sc.B_BANGHAP.items())
+            
+            for key, val_info in hap_rules:
+                res_elem = val_info[0] if isinstance(val_info, tuple) else val_info
+                match_indices = [i for i, b in enumerate(bl) if b in key]
+                
+                # 3글자가 모두 모여 합이 성립하면 해당 지지들의 오행 속성을 결과 오행으로 변경
+                if len(set(match_indices)) >= 3:
+                    for m_idx in match_indices:
+                        actual_idx = [1, 3, 5, 7][m_idx] # 지지 인덱스 매핑
+                        effective_elements[actual_idx] = res_elem
+
+        # 3. 최종 오행 분포 합산 (개당 12.5%)
+        for elem in effective_elements:
             dist_scores[elem] += 12.5
+            
         return dist_scores
 
-    def _calculate_strength_score(self, palja, me_hj):
+    def _calculate_strength_score(self, palja, me_hj, use_hap_correction=False, use_johoo_correction=False):
         """
-        [인플레이션 & 마이너스 방지판] 
-        위치별 가중치 대비 비중(Ratio)으로 계산하여 0~100 사이의 중화된 점수를 산출합니다.
+        [최종 보정판] 합(Hap) 변환 및 조후/궁성 보정값이 적용된 비중 기반 신강약 계산
         """
         me_elem = sc.ELEMENT_MAP[palja[4]]
         
-        # 1. 위치별 고정 가중치 설정 (합계 100점)
+        # 1. 위치별 기본 가중치 (총합 100점)
         weights = {
-            3: 30.0,  # 월지 (득령)
-            5: 15.0,  # 일지 (득지)
-            7: 15.0,  # 시지
-            1: 10.0,  # 년지
-            0: 10.0,  # 년간 (득세)
-            2: 10.0,  # 월간 (득세)
-            6: 10.0   # 시간 (득세)
+            3: 30.0, 5: 15.0, 7: 15.0, 1: 10.0, 0: 10.0, 2: 10.0, 6: 10.0
         }
         
-        # 기본 점수 설정 (일간 본인의 최소 존재감 10점 부여 -> 마이너스 방지)
-        strong_sum = 10.0 
-        total_presence = 110.0 # 분모 (기본 10 + 가중치 합 100)
+        # [옵션] 조후 및 궁성 보정 적용
+        if use_johoo_correction:
+            month_b = palja[3]
+            # 조후: 계절의 기운(월지) 가중치 강화
+            if month_b in sc.WINTER_BS or month_b in sc.SUMMER_BS:
+                weights[3] += 5.0 # 계절적 영향력 30 -> 35로 상향
+            
+            # 궁성: 일간과 먼 년주(0, 1)의 영향력을 소폭 하향 보정 (-10%)
+            weights[0] *= 0.9
+            weights[1] *= 0.9
 
-        # 2. 각 위치별 기운 합산
+        # 기본 존재 점수 및 분모 초기화
+        strong_sum = 10.0 
+        total_presence = 10.0 + sum(weights.values())
+
+        # 2. [옵션] 합(Hap)에 따른 오행 변화 사전 판정
+        # 각 자리의 실제 오행 한자(HJ)를 결정합니다.
+        effective_hjs = [sc.E_MAP_HJ[c] for c in palja]
+        
+        if use_hap_correction:
+            bl = [palja[1], palja[3], palja[5], palja[7]]
+            b_indices = [1, 3, 5, 7]
+            hap_rules = list(sc.B_SAMHAP.items()) + list(sc.B_BANGHAP.items())
+            
+            for key, val_info in hap_rules:
+                res_elem_name = val_info[0] if isinstance(val_info, tuple) else val_info
+                # 결과 오행 이름(예: '목')을 한자(예: '木')로 변환
+                res_hj = next((k for k, v in sc.HJ_TO_HG.items() if v == res_elem_name), None)
+                
+                match_indices = [i for i, b in enumerate(bl) if b in key]
+                if len(set(match_indices)) >= 3: # 3글자가 모두 모여 합이 성립하면
+                    for m_idx in match_indices:
+                        effective_hjs[b_indices[m_idx]] = res_hj # 오행 속성 영구 변환
+
+        # 3. 각 위치별 기운 합산
         for idx, weight in weights.items():
             char = palja[idx]
-            target_hj = sc.E_MAP_HJ[char]
+            # [중요] 변환 옵션에 따라 수정된 effective_hjs를 사용합니다.
+            target_hj = effective_hjs[idx] 
             relation = sc.REL_MAP.get((me_hj, target_hj))
             
             if relation in sc.STRONG_ENERGY:
-                # 나를 돕는 오행(비겁/인성)인 경우 분자에 합산
                 strong_sum += weight
-                
-                # 통근 보너스: 뿌리가 있으면 강도 가산 (분자와 분모 모두 증가)
+                # 통근 보너스
                 if palja[4] in sc.JIJANGAN_MAP.get(char, ""):
                     bonus = weight * 0.3
                     strong_sum += bonus
                     total_presence += bonus
-            else:
-                # 나를 돕지 않는 오행(식/재/관)인 경우 분자에는 더하지 않음
-                # 감점 대신 '비중 감소' 효과를 통해 점수를 낮춤
-                pass
-
-        # 3. 합(Hap) 분석: 내 오행과 같은 세력이 형성될 때만 가산
-        bl = [palja[1], palja[3], palja[5], palja[7]]
+            # [궁성 보정] 억제 세력일 때 멀리 있으면 감점 효과 완화 로직 추가 가능
         
-        # 지지삼합/방합 통합 처리
-        hap_rules = list(sc.B_SAMHAP.items()) + list(sc.B_BANGHAP.items())
-        for key, val_info in hap_rules:
-            # 삼합은 (결과오행, 왕지) 튜플이고 방합은 결과오행 문자열임
-            res_elem = val_info[0] if isinstance(val_info, tuple) else val_info
-            
-            if me_elem == res_elem: # 형성된 합의 기운이 내 오행과 같을 때
-                match_indices = [b for b in bl if b in key]
-                if len(set(match_indices)) >= 3:
-                    strong_sum += 15.0
-                    total_presence += 15.0
-                elif len(set(match_indices)) == 2:
-                    # 삼합의 경우 왕지 포함 여부 확인 (방합은 단순 2글자)
-                    is_special = True
-                    if isinstance(val_info, tuple): # 삼합일 때
-                        king = val_info[1]
-                        if king not in bl: is_special = False
-                    
-                    if is_special:
-                        strong_sum += 7.0
-                        total_presence += 7.0
+        # 4. 합(Hap) 분석: 세력 보너스 (중복 가산 방지를 위해 옵션 미적용 시에만 더 강력히 작동)
+        # (기존의 3번 섹션 로직을 유지하되, 세력 판정용으로 활용)
+        if not use_hap_correction:
+            bl = [palja[1], palja[3], palja[5], palja[7]]
+            for key, val_info in (list(sc.B_SAMHAP.items()) + list(sc.B_BANGHAP.items())):
+                res_elem = val_info[0] if isinstance(val_info, tuple) else val_info
+                if sc.ELEMENT_MAP[palja[4]] == res_elem:
+                    match_count = sum(1 for b in bl if b in key)
+                    if match_count >= 3:
+                        strong_sum += 15.0; total_presence += 15.0
+                    elif match_count == 2:
+                        strong_sum += 7.0; total_presence += 7.0
 
-        # 4. 머릿수 보정 (세력의 집중도 반영)
+        # 5. 머릿수 보정
         strong_count = sum(1 for i, char in enumerate(palja) 
                           if i not in [3, 4] and 
-                          sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[char])) in sc.STRONG_ENERGY)
+                          sc.REL_MAP.get((me_hj, effective_hjs[i])) in sc.STRONG_ENERGY)
         
         if strong_count >= 5: strong_sum += 5.0
-        elif strong_count <= 1: strong_sum -= 5.0 # 최약 사주 보정
+        elif strong_count <= 1: strong_sum -= 5.0
 
-        # 5. 최종 점수 계산 (비중 기준 % 산출)
-        # (나를 돕는 힘 / 전체 존재감) * 100
+        # 최종 점수 계산
         final_score = (strong_sum / total_presence) * 100
-        
-        print(f"Calculated Power Score: {final_score:.2f}")
-        
-        # 최소 5점, 최대 100점 제한
         return max(5, min(100, int(final_score)))
 
     def _get_detailed_status(self, power):
@@ -726,7 +747,7 @@ class SajuEngine:
     # ==========================================================================
     # 4. 메인 분석 엔진 (Main Analysis Orchestrator)
     # ==========================================================================
-    def analyze(self, birth_str, gender, location, use_yajas_i, calendar_type="양력"):
+    def analyze(self, birth_str, gender, location, use_yajas_i, calendar_type="양력",use_hap_correction=False, use_johoo_correction=False):
         # 1. 입력 날짜 파싱 및 양력 변환
         dt_raw, success = self._parse_and_convert_to_solar(birth_str, calendar_type)
         if not success: return {"error": f"입력 날짜({birth_str})를 찾을 수 없습니다."}
@@ -774,8 +795,8 @@ class SajuEngine:
         # 7. 오행/신강약 분석
         me_hj = sc.E_MAP_HJ.get(palja[4]) 
          # 오행 분포(단순 개수)와 신강약 지수(가중치)를 각각 구함
-        scores = self._get_element_distribution(palja)
-        power = self._calculate_strength_score(palja, me_hj)
+        scores = self._get_element_distribution(palja,use_hap_correction)
+        power = self._calculate_strength_score(palja, me_hj, use_hap_correction, use_johoo_correction)
         yongsin, pillars = self._get_yongsin_info(palja, power, me_hj), self._investigate_sinsal(palja, palja[4], me_hj)
         
         for p in pillars: 
@@ -904,7 +925,7 @@ class SajuEngine:
 
 
 
-    
+        
         # 12. 최종 결과 조립
         final_result = {
             "solar_display": dt_raw.strftime("%Y/%m/%d %H:%M"), 
