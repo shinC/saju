@@ -127,31 +127,47 @@ class SajuEngine:
 
 
     def _get_element_distribution(self, palja, use_hap_correction=False):
-        """오행 분포 계산 (합에 따른 오행 변화 옵션 반영)"""
-        dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
+        """오행 분포 계산 (삼합/방합에 따른 오행 변환 로직 포함)"""
         
-        # 1. 기본 오행 리스트 추출
+        # 1. 초기 오행 추출 (8글자 전체)
         effective_elements = [sc.ELEMENT_MAP[char] for char in palja]
         
-        # 2. 합(Hap) 적용 시 오행 변환
         if use_hap_correction:
-            bl = [palja[1], palja[3], palja[5], palja[7]] # 지지
-            hap_rules = list(sc.B_SAMHAP.items()) + list(sc.B_BANGHAP.items())
+            # 지지 위치(인덱스 1, 3, 5, 7)와 해당 글자 추출
+            jiji_indices = [1, 3, 5, 7]
+            jiji_chars = [palja[i] for i in jiji_indices]
             
-            for key, val_info in hap_rules:
-                res_elem = val_info[0] if isinstance(val_info, tuple) else val_info
-                match_indices = [i for i, b in enumerate(bl) if b in key]
+            # 삼합과 방합 규칙을 하나로 통합하여 순회
+            all_hap_rules = {**sc.B_SAMHAP, **sc.B_BANGHAP}
+            
+            for rule_chars, val_info in all_hap_rules.items():
+                # 규칙 데이터 구조 대응 (튜플일 경우 첫 번째 요소가 결과 오행)
+                res_elem = val_info[0] if isinstance(val_info, (tuple, list)) else val_info
                 
-                # 3글자가 모두 모여 합이 성립하면 해당 지지들의 오행 속성을 결과 오행으로 변경
-                if len(set(match_indices)) >= 3:
-                    for m_idx in match_indices:
-                        actual_idx = [1, 3, 5, 7][m_idx] # 지지 인덱스 매핑
-                        effective_elements[actual_idx] = res_elem
+                # 현재 사주의 지지 중 합 규칙에 포함된 글자들의 인덱스 찾기
+                matched_jiji_slots = [
+                    idx for idx, char in enumerate(jiji_chars) if char in rule_chars
+                ]
+                
+                # 3글자 이상 모였을 때 합 성립 (수국, 목국 등)
+                if len(set([jiji_chars[i] for i in matched_jiji_slots])) >= 3:
+                    print(f">>> 합 성립 감지: {rule_chars} -> {res_elem} 변환")
+                    
+                    # 합에 참여한 지지들의 오행을 결과 오행으로 변경
+                    for slot in matched_jiji_slots:
+                        actual_palja_idx = jiji_indices[slot]
+                        effective_elements[actual_palja_idx] = res_elem
+                    
+                    # 하나의 합이 성립하면 다른 합과 중복 적용되지 않도록 브레이크 (선택 사항)
+                    # break 
 
-        # 3. 최종 오행 분포 합산 (개당 12.5%)
+        # 2. 최종 오행 분포 합산 (개당 12.5%)
+        dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
         for elem in effective_elements:
-            dist_scores[elem] += 12.5
-            
+            if elem in dist_scores:
+                dist_scores[elem] += 12.5
+                
+        print(f">>> 최종 dist_scores: {dist_scores}")
         return dist_scores
 
     def _calculate_strength_score(self, palja, me_hj, use_hap_correction=False, use_johoo_correction=False):
@@ -238,6 +254,9 @@ class SajuEngine:
 
         # 최종 점수 계산
         final_score = (strong_sum / total_presence) * 100
+
+
+        print(f"\n>>> final_score REPORT:\n{final_score}")
         return max(5, min(100, int(final_score)))
 
     def _get_detailed_status(self, power):
@@ -311,7 +330,6 @@ class SajuEngine:
         """체용 변화가 적용된 FUNCTIONAL_POLARITY를 참조하여 십성을 계산합니다."""
         rel = sc.REL_MAP.get((me_hj, sc.E_MAP_HJ[target]))
 
-        print(f"me_hj:{me_hj}, rel:{rel}")
         is_same = (sc.FUNCTIONAL_POLARITY[me] == sc.FUNCTIONAL_POLARITY[target])
         return sc.TEN_GODS_MAP.get((rel, is_same), "-")
 
@@ -532,9 +550,6 @@ class SajuEngine:
         sl = [palja[0], palja[2], palja[4], palja[6]]
         bl = [palja[1], palja[3], palja[5], palja[7]]
         
-        print(f"\n>>> DEBUG REPORT:\n sl: { sl }")
-        print(f"\n>>> DEBUG REPORT:\n bl: { bl }")
-        
         for i in range(4):
             for j in range(i + 1, 4):
                 for key, mapping, target_type in sc.PAIRWISE_RULES:
@@ -559,11 +574,7 @@ class SajuEngine:
         # 공망 분석
         ilju_name = palja[4] + palja[5]
         g_jis = sc.GONGMANG_MAP[self.SIXTY_GANZI.index(ilju_name) // 10]
-        
-        print(f"\n>>> DEBUG REPORT:\n  bl2 : {bl} , res2 : { res }")
-        print(f"\n>>> DEBUG REPORT:\n  ilju_name : {ilju_name} ")
-        print(f"\n>>> DEBUG REPORT:\n  g_jis : {g_jis} ")
-        
+         
         for i, b in enumerate(bl):
             if b in g_jis: 
                 res["공망"].append({"name": f"{sc.POSITIONS[i]} 공망({sc.B_KOR.get(b, b)})", "subs": [i]})
@@ -964,7 +975,8 @@ class SajuEngine:
             "initial_wolun": initial_wolun,
             "now_year": now.year,
             "now_month": now.month,
-            "initial_calendar": self.get_month_calendar(now.year, now.month)  
+            "initial_calendar": self.get_month_calendar(now.year, now.month),
+            "tengod_analysis_dict": tengod_dict  
         }
         
         # debug_json = json.dumps(final_result, indent=4, ensure_ascii=False, default=str)

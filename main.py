@@ -159,7 +159,8 @@ def re_analyze(request: Request):
         # 체크박스 값은 문자열로 들어오므로 불린(Boolean)으로 변환합니다.
         use_hap = params.get('use_hap', 'false').lower() == 'true'
         use_johoo = params.get('use_johoo', 'false').lower() == 'true'
-
+        
+        print(f"보정 옵션 상태 -> 합: {use_hap}, 조후: {use_johoo}")  
         # 2. 필수 값이 누락되었는지 확인
         if not all([birth, gender, location]):
             return {"error": "필수 분석 정보(생년월일, 성별, 지역)가 누락되었습니다."}
