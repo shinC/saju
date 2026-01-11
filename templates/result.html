@@ -271,14 +271,14 @@
             <div class="relative w-full max-w-[240px] aspect-square">
                 <canvas id="elementDoughnutChart"></canvas>
                 <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none w-full">
-                    <div class="text-2xl font-extrabold
+                    <div id="rep-elem-container" class="text-2xl font-extrabold
                         {% if result.representative_elem == '목' %}text-green-600
                         {% elif result.representative_elem == '화' %}text-red-600
                         {% elif result.representative_elem == '토' %}text-yellow-700
                         {% elif result.representative_elem == '금' %}text-gray-500
                         {% elif result.representative_elem == '수' %}text-blue-600{% endif %}">
-                        {{ result.representative_elem }}
-                        <span class="text-base">
+                        <span id="rep-elem-text">{{ result.representative_elem }}</span>
+                        <span id="rep-elem-hanja" class="text-base">
                             {% if result.representative_elem == '목' %}(木)
                             {% elif result.representative_elem == '화' %}(火)
                             {% elif result.representative_elem == '토' %}(土)
@@ -295,7 +295,7 @@
             <div class="relative w-full max-w-[240px] aspect-square">
                 <canvas id="tengodDoughnutChart"></canvas>
                 <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none w-full">
-                    <div class="text-xl font-extrabold text-gray-700">
+                    <div id="rep-tendency-display" class="text-xl font-extrabold text-gray-700">
                         {{ result.representative_tendency }}
                     </div>
                     <div class="text-[10px] text-gray-400 mt-1 font-bold">
@@ -421,17 +421,17 @@
     <section class="p-6">
         <h2 class="text-lg font-bold mb-4">신강/신약 분석</h2>
         <div class="bg-gray-50 p-6 rounded-[28px] border border-gray-100">
-            <p class="text-sm text-gray-600">
+            <p id="power-status-text" class="text-sm text-gray-600">
                 {{ result.name }}님은 <span class="font-bold text-black">{{ result.status }}({{ result.power }})</span> 사주입니다.
             </p>
             <div class="relative h-2 bg-gray-200 rounded-full mt-8">
-                <div class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
+                <div id="power-indicator" class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-800 rounded-full border-2 border-white shadow" 
                      style="left: {{ result.power }}%;"></div>
             </div>
         </div>
     </section>
 <div class="w-full border border-gray-200 rounded-[12px] p-5 bg-white shadow-sm">
-    <div class="flex items-center gap-6">
+    <div id="yongsin-list" class="flex items-center gap-6">
         
         {% if result.yongsin_detail.johoo_name %}
         <div class="flex items-center">
@@ -1110,8 +1110,70 @@ async function updateAnalysis() {
         
         const powerStatus = document.getElementById('power-status-text');
         const powerIndicator = document.getElementById('power-indicator');
-        if (powerStatus) powerStatus.innerText = `${data.status}(${data.power})`;
-        if (powerIndicator) powerIndicator.style.left = `${data.power}%`;
+        if (powerStatus && data.status) {
+            // result.name 부분은 초기 렌더링된 것을 유지하기 위해 data에서 온 name을 사용하거나 
+            // 기존 텍스트 형식을 유지합니다.
+            powerStatus.innerHTML = `{{ result.name }}님은 <span class="font-bold text-black">${data.status}(${data.power})</span> 사주입니다.`;
+        }
+
+        if (powerIndicator) {
+            // 바(Indicator)의 위치를 0~100% 사이로 이동시킵니다.
+            powerIndicator.style.left = `${data.power}%`;
+        }
+
+        // --- 7. 대표 오행(본질) 업데이트 ---
+        const hanjaMap = { '목': '(木)', '화': '(火)', '토': '(土)', '금': '(金)', '수': '(水)' };
+        const colorMap = {
+            '목': 'text-green-600', '화': 'text-red-600', '토': 'text-yellow-700', 
+            '금': 'text-gray-500', '수': 'text-blue-600'
+        };
+        const repElemText = document.getElementById('rep-elem-text');
+        const repElemHanja = document.getElementById('rep-elem-hanja');
+        const repElemContainer = document.getElementById('rep-elem-container');
+
+        if (data.representative_elem && repElemText) {
+            repElemText.innerText = data.representative_elem;
+            if (repElemHanja) repElemHanja.innerText = hanjaMap[data.representative_elem] || '';
+            if (repElemContainer) {
+                // 기존 색상 클래스 제거 후 신규 적용
+                Object.values(colorMap).forEach(cls => repElemContainer.classList.remove(cls));
+                repElemContainer.classList.add(colorMap[data.representative_elem]);
+            }
+        }
+
+        // --- 8. 대표 성향(십성) 업데이트 ---
+        const tendencyHanjaMap = {
+            "비견": "(比肩)", "겁재": "(劫財)", "식신": "(食神)", "상관": "(傷官)",
+            "편재": "(偏財)", "정재": "(正財)", "편관": "(偏官)", "정관": "(正官)",
+            "편인": "(偏印)", "정인": "(正인)"
+        };
+        const repTendencyDisplay = document.getElementById('rep-tendency-display');
+        if (repTendencyDisplay && data.representative_tendency) {
+            const hanja = tendencyHanjaMap[data.representative_tendency] || '';
+            repTendencyDisplay.innerHTML = `
+                ${data.representative_tendency}
+                <div class="text-[10px] text-gray-400 mt-1 font-bold">${hanja}</div>
+            `;
+        }
+
+        // --- 9. 용신(Yongsin) 업데이트 ---
+        const yongsinList = document.getElementById('yongsin-list');
+        if (yongsinList && data.yongsin_detail) {
+            let yongsinHtml = '';
+            if (data.yongsin_detail.johoo_name) {
+                yongsinHtml += `
+                    <div class="flex items-center">
+                        <span class="text-[#e53e3e] font-bold text-[17px]">${data.yongsin_detail.johoo_name.split('(')[0]}</span>
+                        <span class="text-gray-500 text-[15px] ml-1">(조후용신)</span>
+                    </div>`;
+            }
+            yongsinHtml += `
+                <div class="flex items-center">
+                    <span class="text-[#e53e3e] font-bold text-[17px]">${data.yongsin_detail.main_yongsin.split('(')[0]}</span>
+                    <span class="text-gray-500 text-[15px] ml-1">(억부용신)</span>
+                </div>`;
+            yongsinList.innerHTML = yongsinHtml;
+        }
 
     } catch (e) {
         console.error("업데이트 실행 중 오류:", e);
