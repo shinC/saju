@@ -127,61 +127,27 @@ class SajuEngine:
 
 
     def _get_element_distribution(self, palja, use_hap_correction=False, use_johoo_correction=False):
-        """
-        오행 분포 계산: 
-        - 기본(Default): 모든 글자 12.5% (단순 개수)
-        - Hap ON: 변환된 오행으로 개수 계산
-        - Johoo/Gungseong ON: 위치별 가중치 및 계절 보정 적용
-        """
-        # 1. 초기 오행 추출 (ELEMENT_MAP 참조)
-        effective_elements = [sc.ELEMENT_MAP[char] for char in palja]
-        
-        # [Hap] 합 보정 (오행의 종류를 바꿈)
-        if use_hap_correction:
-            jiji_indices = [1, 3, 5, 7]
-            jiji_chars = [palja[i] for i in jiji_indices]
-            all_hap_rules = {**sc.B_SAMHAP, **sc.B_BANGHAP}
-            
-            for rule_chars, val_info in all_hap_rules.items():
-                res_elem_raw = val_info[0] if isinstance(val_info, (tuple, list)) else val_info
-                res_elem = res_elem_raw[0]
-                
-                matched_indices = [idx for idx, c in enumerate(jiji_chars) if c in rule_chars]
-                unique_matched = set([jiji_chars[i] for i in matched_indices])
-                
-                if len(unique_matched) >= 3 or (len(unique_matched) >= 2 and any(w in unique_matched for w in "子午卯酉")):
-                    for slot in matched_indices:
-                        effective_elements[jiji_indices[slot]] = res_elem
-
-        # ---------------------------------------------------------
-        # 2. 가중치 설정 (디폴트는 12.5점씩 동일)
-        # ---------------------------------------------------------
-        if use_johoo_correction:
-            # [Johoo/Gungseong ON] 전문 분석 모드: 위치별 가중치 적용
-            weights = [10.0, 10.0, 10.0, 30.0, 10.0, 15.0, 10.0, 15.0]
-            
-            # 계절 보정 (월지 기운 강화)
-            month_b = palja[3]
-            if month_b in sc.WINTER_BS or month_b in sc.SUMMER_BS:
-                weights[3] += 5.0
-            weights[0] *= 0.9
-            weights[1] *= 0.9
-        else:
-            # [Default] 단순 개수 모드: 100% / 8글자 = 각 12.5%
-            weights = [12.5] * 8
-
-        # 3. 점수 합산 및 정규화
+        weights, hap_map = self._get_analysis_config(palja, use_hap_correction, use_johoo_correction)
         dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
-        for i, elem in enumerate(effective_elements):
-            if elem in dist_scores:
-                dist_scores[elem] += weights[i]
+        effective_elements = [sc.ELEMENT_MAP[char] for char in palja]
+        HAP_RATIO = 0.5
+
+        for i in range(8):
+            orig_elem = sc.ELEMENT_MAP[palja[i]]
+            weight = weights[i]
+            
+            if i in hap_map:
+                new_elem = hap_map[i]
+                dist_scores[new_elem] += weight * HAP_RATIO
+                dist_scores[orig_elem] += weight * (1 - HAP_RATIO)
+                effective_elements[i] = new_elem
+            else:
+                dist_scores[orig_elem] += weight
                 
-        # 정규화 (가중치 적용 시 총합이 100이 아닐 수 있으므로 비율로 재계산)
-        total_sum = sum(dist_scores.values())
-        if total_sum > 0:
-            for k in dist_scores:
-                dist_scores[k] = round((dist_scores[k] / total_sum) * 100, 1)
-                
+        total = sum(dist_scores.values())
+        for k in dist_scores:
+            dist_scores[k] = round((dist_scores[k] / total * 100), 1) if total > 0 else 0.0
+            
         return dist_scores, effective_elements
 
     def _calculate_strength_score(self, palja, effective_elements, me_hj, use_hap_correction=False, use_johoo_correction=False):
@@ -616,63 +582,55 @@ class SajuEngine:
             }
         return results
 
-    def _get_tengod_distribution(self, pillars, use_johoo_correction=False, palja=None):
-        """
-        포스텔러 스타일: 8글자 위치별 십성 비중 계산
-        - Default: 각 글자 12.5% 고정 비중
-        - Johoo/Gungseong ON: 위치별 가중치(월지 30% 등) 및 조후 보정 반영
-        """
-        tg_list = ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"]
-        # 점수를 저장할 딕셔너리 (초기값 0.0)
-        scores = {tg: 0.0 for tg in tg_list}
-        
-        # 1. 가중치 설정 (오행 분포 로직과 동일하게 설정)
-        if use_johoo_correction and palja:
-            # 가중치: [년간, 년지, 월간, 월지, 일간, 일지, 시간, 시지]
-            weights = [10.0, 10.0, 10.0, 30.0, 10.0, 15.0, 10.0, 15.0]
-            
-            # 조후 보정 (월지 기운 강화)
-            month_b = palja[3]
-            if month_b in sc.WINTER_BS or month_b in sc.SUMMER_BS:
-                weights[3] += 5.0
-            weights[0] *= 0.9
-            weights[1] *= 0.9
-        else:
-            # 디폴트: 모든 위치 12.5% 동일 가중치
-            weights = [12.5] * 8
-
-        # 2. 8글자 위치별 십성 점수 합산
-        # pillars는 [년, 월, 일, 시] 순서의 4개 기둥 리스트입니다.
-        for i, p in enumerate(pillars):
-            # i=0(년), 1(월), 2(일), 3(시)
-            # 천간 인덱스: 0, 2, 4, 6 | 지지 인덱스: 1, 3, 5, 7
-            
-            # 천간 십성 점수 누적
-            tg_gan = "비견" if p['t_gan'] == "본인" else p['t_gan']
-            if tg_gan in scores:
-                scores[tg_gan] += weights[i * 2]
-                
-            # 지지 십성 점수 누적
-            tg_ji = p['t_ji']
-            if tg_ji in scores:
-                scores[tg_ji] += weights[i * 2 + 1]
-
-        # 3. 정규화 및 결과 생성
-        total_score = sum(scores.values())
-        result = {}
-        
-        for tg in tg_list:
-            score = scores[tg]
-            # 전체 합계 대비 비율 계산 (100% 기준)
-            ratio_val = (score / total_score * 100) if total_score > 0 else 0
-            
-            result[tg] = {
-                "count": score, 
-                "ratio": f"{ratio_val:.1f}%" if score > 0 else "-"
-            }
-            
-        return result
+    def _get_tengod_distribution(self, palja, use_hap_correction=False, use_johoo_correction=False):
+        # 1. 공통 설정(가중치, 합 맵) 로드 - 오행 함수와 동일한 weights를 사용함
+        if len(palja) != 8:
+            raise ValueError(f"팔자 데이터가 부족합니다. 현재 {len(palja)}개만 입력되었습니다.")
     
+        weights, hap_map = self._get_analysis_config(palja, use_hap_correction, use_johoo_correction)
+        
+        # 결과 저장용 딕셔너리
+        scores = {tg: 0.0 for tg in ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"]}
+        
+        me_gan = palja[4] # 일간
+        me_elem_han = sc.HG_TO_HJ[sc.ELEMENT_MAP[me_gan]] # 일간의 한자 오행 (예: '木')
+        me_pol = sc.POLARITY_MAP[me_gan]
+        
+        HAP_RATIO = 0.5 # 합 보정 시 에너지 배분 비율 (50%)
+
+        for i in range(8):
+            char = palja[i]
+            weight = weights[i]
+            
+            # 원래 글자의 한자 오행과 음양
+            char_elem_han = sc.HG_TO_HJ[sc.ELEMENT_MAP[char]]
+            char_pol = sc.POLARITY_MAP[char]
+            is_same_pol = (me_pol == char_pol)
+            
+            # A. 원래 이 자리에 있어야 할 십성 계산
+            rel_group = sc.REL_MAP.get((me_elem_han, char_elem_han))
+            orig_tg = sc.TEN_GODS_MAP.get((rel_group, is_same_pol))
+            
+            # 일간 본인 자리는 '비견'으로 강제 설정
+            if i == 4: orig_tg = "비견"
+
+            if i in hap_map:
+                # B. 합으로 변한 오행의 새로운 십성 계산
+                new_elem_han = sc.HG_TO_HJ[hap_map[i]] # 합 결과 한글('금') -> 한자('金')
+                new_rel_group = sc.REL_MAP.get((me_elem_han, new_elem_han))
+                new_tg = sc.TEN_GODS_MAP.get((new_rel_group, is_same_pol))
+                
+                # 오행 점수 배분과 동일하게 5:5로 십성 점수 배분
+                if new_tg in scores: scores[new_tg] += weight * HAP_RATIO
+                if orig_tg in scores: scores[orig_tg] += weight * (1 - HAP_RATIO)
+            else:
+                # 합이 없으면 원래 십성에 100% 부여
+                if orig_tg in scores:
+                    scores[orig_tg] += weight
+
+        # 3. 정규화 (100% 환산)
+        total = sum(scores.values())
+        return {tg: {"count": scores[tg], "ratio": f"{(scores[tg]/total*100):.1f}%" if scores[tg] > 0 else "-"} for tg in scores}
     def _get_combined_analysis(self, scores, me_elem, pillars):
         """포스텔러 스타일: 오행(목~수)을 고정하고 십성을 그에 맞춰 배치합니다."""
         elements = ["목", "화", "토", "금", "수"]
@@ -813,6 +771,37 @@ class SajuEngine:
         if diff == 3: return '관성'  # 금 -> 목 (나를 극함)
         if diff == 4: return '인성'  # 수 -> 목 (나를 생함)
         return '비겁'
+
+    def _get_analysis_config(self, palja, use_hap_correction, use_johoo_correction):
+        """가중치와 합 정보를 한 곳에서 관리"""
+        # 1. 가중치 설정
+        if use_johoo_correction:
+            weights = [10.0, 10.0, 10.0, 30.0, 10.0, 15.0, 10.0, 15.0]
+            month_b = palja[3]
+            if month_b in sc.WINTER_BS or month_b in sc.SUMMER_BS:
+                weights[3] += 5.0
+            weights[0] *= 0.9
+            weights[1] *= 0.9
+        else:
+            weights = [12.5] * 8
+
+        # 2. 합(Hap) 맵 생성
+        hap_map = {}
+        if use_hap_correction:
+            jiji_indices = [1, 3, 5, 7]
+            jiji_chars = [palja[i] for i in jiji_indices]
+            all_hap_rules = {**sc.B_SAMHAP, **sc.B_BANGHAP}
+            
+            for rule_chars, val_info in all_hap_rules.items():
+                res_elem = (val_info[0] if isinstance(val_info, (tuple, list)) else val_info)[0]
+                matched_indices = [idx for idx, c in enumerate(jiji_chars) if c in rule_chars]
+                unique_matched = set([jiji_chars[i] for i in matched_indices])
+                
+                if len(unique_matched) >= 3 or (len(unique_matched) >= 2 and any(w in unique_matched for w in "子午卯酉")):
+                    for slot in matched_indices:
+                        hap_map[jiji_indices[slot]] = res_elem
+                        
+        return weights, hap_map   
     # ==========================================================================
     # 4. 메인 분석 엔진 (Main Analysis Orchestrator)
     # ==========================================================================
@@ -918,8 +907,11 @@ class SajuEngine:
         
         # 11. 오행/십성 통계 구성 (HTML 에러 방지)
         element_dict = self._get_element_status(scores)
-        tengod_dict = self._get_tengod_distribution(pillars, use_johoo_correction, palja)
-        
+        tengod_dict = self._get_tengod_distribution(
+            palja=palja, 
+            use_hap_correction=use_hap_correction, 
+            use_johoo_correction=use_johoo_correction
+        )
         element_list = [{"name": k, **v} for k, v in element_dict.items()]
         tengod_list = [{"name": k, **v} for k, v in tengod_dict.items()]
         
