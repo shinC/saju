@@ -88,7 +88,6 @@ async def analyze_web(
         })
 
     except Exception as e:
-        import saju_constants as sc  # 상단에 이미 있다면 생략 가능
         return templates.TemplateResponse("index.html", {
             "request": request,
             "cities": list(sc.CITY_DATA.keys()),  # 🔥 에러 페이지로 갈 때도 도시 목록을 다시 보내줘야 합니다.

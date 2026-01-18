@@ -115,14 +115,14 @@ class ExpertPresenter:
         print(f"샤주팔자 { data['interactions']}")
 
 if __name__ == "__main__":
-    engine = SajuEngine('manse_data.json', 'term_data.json')
-    bridge = FortuneBridge('ilju_data.json') 
+    engine = SajuEngine('./data/manse_data.json', './data/term_data.json')
+    bridge = FortuneBridge('./data/ilju_data.json') 
     presenter = ExpertPresenter(engine, bridge)
     
     print("시스템: SajuEngine v1.9 및 통합 분석(재물운 포함)을 시작합니다...")
     
     # 분석 실행 (사용자님의 생년월일 기준)
-    test_result = engine.analyze("1954-10-05 16:01", "W", location='서울')
+    test_result = engine.analyze("1954-10-05 16:01", "F", location='서울', use_yajas_i=True)
 
     # 결과 출력
     presenter.render(test_result)

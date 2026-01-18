@@ -383,8 +383,8 @@ class SajuEngine:
         """
         yeonun_list = []
         start_year = int(birth_year) + int(daeun_start_age) - 1
-        # [수정] 일간 한자(庚)를 오행 이름(金)으로 미리 변환
-        me_elem = sc.E_MAP_HJ.get(me_hj)
+        # [수정] 일간 천간(庚)의 한자 오행(金)을 가져옴
+        me_elem = sc.E_MAP_HJ.get(me_gan)
         
         for i in range(10):
             target_year = start_year + i
@@ -506,7 +506,7 @@ class SajuEngine:
                     elif pair2 in mapping:
                         res[key].append({"name": mapping[pair2], "subs": [i, j]})
                         
-        print(f"\n>>> DEBUG REPORT:\n bl : {bl} ,res : { res }")
+
         
         # 삼합/방합/삼형 등 그룹 단위 분석
         self._check_group_interactions(bl, res)
