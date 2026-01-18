@@ -13,6 +13,7 @@ import saju_constants as sc
 # 엔진 및 브릿지 임포트
 from saju_engine import SajuEngine 
 from FortuneBridge import FortuneBridge
+from fortune_generator import FortuneGenerator, get_daily_fortune
 
 app = FastAPI(title="포스텔러 만세력 2.2")
 templates = Jinja2Templates(directory="templates")
@@ -22,10 +23,11 @@ try:
     # 경로 및 파일명은 사용자 환경에 맞게 유지
     engine = SajuEngine("./data/manse_data.json", "./data/term_data.json")
     bridge = FortuneBridge("./data/ilju_data.json")
+    fortune_gen = FortuneGenerator(fortune_bridge=bridge)
     print("✅ 엔진 및 브릿지 로드 완료")
 except Exception as e:
     traceback.print_exc()
-    engine, bridge = None, None
+    engine, bridge, fortune_gen = None, None, None
 
 HAN_MAP = {
     '甲':'갑','乙':'을','丙':'병','丁':'정','戊':'무','己':'기','庚':'경','辛':'신','壬':'임','癸':'계',
@@ -140,6 +142,77 @@ async def get_calendar(year: int, month: int):
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/daily-fortune")
+async def get_daily_fortune_api(
+    birth: str,
+    gender: str,
+    location: str,
+    name: str = "회원",
+    relationship_status: str = "single",
+    marriage_status: str = "single",
+    calendar_type: str = "양력",
+    target_date: Optional[str] = None
+):
+    """
+    오늘의 운세 API
+    
+    Parameters:
+    - birth: 생년월일시 (YYYY-MM-DD HH:MM 형식)
+    - gender: 성별 (M/F)
+    - location: 출생 지역
+    - name: 사용자 이름 (선택)
+    - relationship_status: 연애 상태 - single/couple (선택)
+    - marriage_status: 결혼 상태 - single/married (선택)
+    - calendar_type: 양력/음력/음력(윤달) (선택)
+    - target_date: 운세를 볼 날짜 YYYY-MM-DD (선택, 기본값: 오늘)
+    
+    Returns:
+    - 오늘의 운세 JSON
+    """
+    if engine is None or fortune_gen is None:
+        raise HTTPException(status_code=500, detail="엔진이 로드되지 않았습니다.")
+    
+    try:
+        # 1. 사주 분석 실행
+        analysis = engine.analyze(
+            birth_str=birth,
+            gender=gender,
+            location=location,
+            use_yajas_i=True,
+            calendar_type=calendar_type
+        )
+        
+        if "error" in analysis:
+            raise HTTPException(status_code=400, detail=analysis["error"])
+        
+        # 2. 운세 생성 대상 날짜 파싱
+        fortune_date = None
+        if target_date:
+            try:
+                fortune_date = datetime.strptime(target_date, "%Y-%m-%d")
+            except ValueError:
+                fortune_date = datetime.now()
+        else:
+            fortune_date = datetime.now()
+        
+        # 3. 오늘의 운세 생성
+        fortune_result = fortune_gen.generate_daily_fortune(
+            analysis=analysis,
+            target_date=fortune_date,
+            name=name,
+            relationship_status=relationship_status,
+            marriage_status=marriage_status
+        )
+        
+        return fortune_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"운세 생성 중 오류: {str(e)}")
 
 
 @app.get("/api/re-analyze")
