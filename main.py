@@ -144,6 +144,81 @@ async def get_calendar(year: int, month: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/fortune", response_class=HTMLResponse)
+async def fortune_input_page(request: Request):
+    """오늘의 운세 입력 페이지"""
+    city_list = list(sc.CITY_DATA.keys())
+    return templates.TemplateResponse("fortune_input.html", {
+        "request": request,
+        "cities": city_list
+    })
+
+
+@app.post("/fortune_web", response_class=HTMLResponse)
+async def fortune_web(
+    request: Request,
+    name: str = Form("회원"),
+    gender: str = Form(...),
+    birth_date: str = Form(...),
+    birth_time: str = Form(...),
+    calendar_type: str = Form(...),
+    location: str = Form(...),
+    relationship_status: str = Form("single"),
+    marriage_status: str = Form("single")
+):
+    """오늘의 운세 결과 페이지 (웹 폼 제출용)"""
+    if engine is None or fortune_gen is None:
+        return templates.TemplateResponse("fortune_input.html", {
+            "request": request,
+            "cities": list(sc.CITY_DATA.keys()),
+            "error": "엔진이 로드되지 않았습니다."
+        })
+
+    try:
+        # 1. 날짜 형식 정규화
+        formatted_date = birth_date.replace("/", "-")
+        birth_str = f"{formatted_date} {birth_time}"
+
+        # 2. 사주 분석 실행
+        analysis = engine.analyze(
+            birth_str=birth_str,
+            gender=gender,
+            location=location,
+            use_yajas_i=True,
+            calendar_type=calendar_type
+        )
+
+        if "error" in analysis:
+            return templates.TemplateResponse("fortune_input.html", {
+                "request": request,
+                "cities": list(sc.CITY_DATA.keys()),
+                "error": analysis["error"]
+            })
+
+        # 3. 오늘의 운세 생성
+        fortune_result = fortune_gen.generate_daily_fortune(
+            analysis=analysis,
+            target_date=datetime.now(),
+            name=name if name else "회원",
+            relationship_status=relationship_status,
+            marriage_status=marriage_status
+        )
+
+        # 4. 결과 페이지 렌더링
+        return templates.TemplateResponse("fortune_result.html", {
+            "request": request,
+            "fortune": fortune_result
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return templates.TemplateResponse("fortune_input.html", {
+            "request": request,
+            "cities": list(sc.CITY_DATA.keys()),
+            "error": f"운세 생성 중 오류가 발생했습니다: {str(e)}"
+        })
+
+
 @app.get("/api/daily-fortune")
 async def get_daily_fortune_api(
     birth: str,

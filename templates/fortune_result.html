@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오늘의 운세 - {{ fortune.name }}님</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background: linear-gradient(180deg, #fef9f3 0%, #fff5eb 100%); min-height: 100vh; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .fortune-card { background: white; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        .score-ring { position: relative; width: 100px; height: 100px; }
+        .score-ring svg { transform: rotate(-90deg); }
+        .score-ring .bg { stroke: #f3f4f6; }
+        .score-ring .progress { stroke: url(#gradient); stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+        .category-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .lucky-item { background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fed7aa; }
+        .section-divider { height: 8px; background: #fef3e2; }
+        .progress-bar { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeInUp 0.6s ease forwards; }
+        .delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .delay-3 { animation-delay: 0.3s; opacity: 0; }
+        .delay-4 { animation-delay: 0.4s; opacity: 0; }
+    </style>
+</head>
+<body class="max-w-md mx-auto pb-24">
+    <!-- 헤더 -->
+    <header class="sticky top-0 bg-white/80 backdrop-blur-md z-50 px-5 py-4 border-b border-orange-100">
+        <div class="flex items-center justify-between">
+            <a href="/fortune" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </a>
+            <h1 class="text-lg font-bold text-gray-800">오늘의 운세</h1>
+            <div class="w-6"></div>
+        </div>
+    </header>
+
+    <!-- 메인 운세 카드 -->
+    <section class="p-5 animate-fade-in">
+        <div class="fortune-card p-6 text-center">
+            <!-- 날짜 & 인사 -->
+            <p class="text-sm text-orange-500 font-medium mb-2">{{ fortune.date }}</p>
+            <h2 class="text-xl font-bold text-gray-800 mb-1">{{ fortune.name }}님의 운세</h2>
+            <p class="text-sm text-gray-500 mb-6">{{ fortune.greeting }}</p>
+
+            <!-- 종합 점수 -->
+            <div class="flex justify-center mb-6">
+                <div class="score-ring">
+                    <svg width="100" height="100" viewBox="0 0 100 100">
+                        <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#f97316"/>
+                                <stop offset="100%" stop-color="#fbbf24"/>
+                            </linearGradient>
+                        </defs>
+                        <circle class="bg" cx="50" cy="50" r="42" fill="none" stroke-width="8"/>
+                        <circle class="progress" cx="50" cy="50" r="42" fill="none" stroke-width="8" 
+                                stroke-dasharray="264" stroke-dashoffset="{{ 264 - (fortune.overall_score * 2.64) }}"/>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span class="text-3xl font-bold text-gray-800">{{ fortune.overall_score }}</span>
+                        <span class="text-xs text-gray-400">종합점수</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 총운 -->
+            <div class="bg-gradient-to-r from-orange-50 to-amber-50 rounded-2xl p-5 text-left">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-xl">🌟</span>
+                    <span class="font-bold text-gray-800">총운</span>
+                </div>
+                <p class="text-[15px] text-gray-600 leading-relaxed">{{ fortune.overall }}</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 행운 아이템 -->
+    <section class="px-5 mb-6 animate-fade-in delay-1">
+        <div class="fortune-card p-5">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="text-lg">🍀</span> 오늘의 행운
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="lucky-item rounded-xl p-4 text-center">
+                    <span class="text-2xl mb-1 block">🎨</span>
+                    <span class="text-xs text-gray-500">행운의 색</span>
+                    <p class="font-bold text-gray-800 text-sm mt-1">{{ fortune.lucky.color }}</p>
+                </div>
+                <div class="lucky-item rounded-xl p-4 text-center">
+                    <span class="text-2xl mb-1 block">🔢</span>
+                    <span class="text-xs text-gray-500">행운의 숫자</span>
+                    <p class="font-bold text-gray-800 text-sm mt-1">{{ fortune.lucky.number }}</p>
+                </div>
+                <div class="lucky-item rounded-xl p-4 text-center">
+                    <span class="text-2xl mb-1 block">🧭</span>
+                    <span class="text-xs text-gray-500">행운의 방향</span>
+                    <p class="font-bold text-gray-800 text-sm mt-1">{{ fortune.lucky.direction }}</p>
+                </div>
+                <div class="lucky-item rounded-xl p-4 text-center">
+                    <span class="text-2xl mb-1 block">✨</span>
+                    <span class="text-xs text-gray-500">행운의 아이템</span>
+                    <p class="font-bold text-gray-800 text-sm mt-1">{{ fortune.lucky.item }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <!-- 카테고리별 운세 -->
+    <section class="p-5 space-y-4 animate-fade-in delay-2">
+        <h3 class="font-bold text-gray-800 text-lg mb-2">분야별 운세</h3>
+
+        <!-- 학업운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-blue-100">📚</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">학업운</span>
+                        <span class="text-sm font-bold text-blue-500">{{ fortune.scores.study }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-blue-400 to-blue-500" style="width: {{ fortune.scores.study }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.study }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 재물운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-yellow-100">💰</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">재물운</span>
+                        <span class="text-sm font-bold text-yellow-500">{{ fortune.scores.wealth }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-yellow-400 to-amber-500" style="width: {{ fortune.scores.wealth }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.wealth }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 연애운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-pink-100">💕</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">연애운</span>
+                        <span class="text-sm font-bold text-pink-500">{{ fortune.scores.love }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-pink-400 to-rose-500" style="width: {{ fortune.scores.love }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.love }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 결혼운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-purple-100">💍</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">결혼운</span>
+                        <span class="text-sm font-bold text-purple-500">{{ fortune.scores.marriage }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-purple-400 to-violet-500" style="width: {{ fortune.scores.marriage }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.marriage }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 직업운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-indigo-100">💼</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">직업운</span>
+                        <span class="text-sm font-bold text-indigo-500">{{ fortune.scores.career }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-indigo-400 to-indigo-500" style="width: {{ fortune.scores.career }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.career }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 사업운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-emerald-100">📈</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">사업운</span>
+                        <span class="text-sm font-bold text-emerald-500">{{ fortune.scores.business }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-emerald-400 to-teal-500" style="width: {{ fortune.scores.business }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.business }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 건강운 -->
+        <div class="fortune-card p-5">
+            <div class="flex items-start gap-4">
+                <div class="category-icon bg-red-100">❤️</div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800">건강운</span>
+                        <span class="text-sm font-bold text-red-500">{{ fortune.scores.health }}점</span>
+                    </div>
+                    <div class="progress-bar mb-3">
+                        <div class="progress-fill bg-gradient-to-r from-red-400 to-rose-500" style="width: {{ fortune.scores.health }}%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.health }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <!-- 시간대별 조언 -->
+    <section class="p-5 animate-fade-in delay-3">
+        <div class="fortune-card p-5">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="text-lg">⏰</span> 시간대별 조언
+            </h3>
+            <p class="text-sm text-gray-600 leading-relaxed">{{ fortune.time_advice }}</p>
+        </div>
+    </section>
+
+    <!-- 마무리 메시지 -->
+    <section class="p-5 animate-fade-in delay-4">
+        <div class="bg-gradient-to-r from-orange-400 to-amber-400 rounded-2xl p-6 text-center text-white">
+            <p class="text-lg font-medium leading-relaxed">{{ fortune.closing }}</p>
+        </div>
+    </section>
+
+    <!-- 하단 네비게이션 -->
+    <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around py-4 z-50">
+        <a href="/" class="text-center text-gray-400 hover:text-gray-600">
+            <span class="text-xl block mb-1">🔮</span>
+            <span class="text-[10px]">만세력</span>
+        </a>
+        <a href="/fortune" class="text-center text-orange-500 font-bold">
+            <span class="text-xl block mb-1">🌟</span>
+            <span class="text-[10px]">오늘의 운세</span>
+        </a>
+        <a href="/" class="text-center text-gray-400 hover:text-gray-600">
+            <span class="text-xl block mb-1">💑</span>
+            <span class="text-[10px]">궁합</span>
+        </a>
+    </nav>
+
+    <script>
+        // 페이지 로드 시 애니메이션 트리거
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.animate-fade-in');
+            cards.forEach((card, index) => {
+                card.style.animationDelay = `${index * 0.1}s`;
+            });
+        });
+    </script>
+</body>
+</html>

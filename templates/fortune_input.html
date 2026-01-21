@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>오늘의 운세</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background: linear-gradient(180deg, #fef9f3 0%, #fff5eb 100%); -webkit-tap-highlight-color: transparent; min-height: 100vh; }
+        .input-box { border: 1.5px solid #dcdcdc; border-radius: 14px; padding: 12px; font-size: 16px; color: #333; transition: all 0.2s; background: white; }
+        .input-box:focus { border-color: #e67e22; outline: none; box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.1); }
+        .toggle-btn { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #444; font-size: 16px; user-select: none; padding: 4px 0; }
+        .circle { width: 22px; height: 22px; border: 1.5px solid #dcdcdc; border-radius: 50%; position: relative; transition: all 0.2s; background: white; flex-shrink: 0; }
+        .toggle-btn.active .circle { border-color: #e67e22; background-color: #e67e22; }
+        .toggle-btn.active .circle::after { content: ''; position: absolute; width: 8px; height: 8px; background: white; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #citySheet { transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        #citySheet.show { transform: translateY(0); }
+        .sheet-overlay { opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .sheet-overlay.show { opacity: 1; pointer-events: auto; }
+        .fortune-icon { font-size: 48px; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .gradient-btn { background: linear-gradient(135deg, #e67e22 0%, #f39c12 100%); }
+        .gradient-btn:hover { background: linear-gradient(135deg, #d35400 0%, #e67e22 100%); }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4">
+    {% if error %}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 w-full max-w-md" role="alert">
+        <strong class="font-bold">에러 발생:</strong>
+        <span class="block sm:inline">{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form id="fortuneForm" action="/fortune_web" method="POST" class="w-full max-w-md bg-white rounded-[32px] shadow-lg p-7 space-y-7 mt-4 border border-orange-100">
+        <!-- 헤더 -->
+        <div class="text-center mb-4">
+            <div class="fortune-icon mb-2">🔮</div>
+            <h1 class="font-bold text-[22px] text-gray-800">오늘의 운세</h1>
+            <p class="text-sm text-gray-400 mt-1">사주 기반 맞춤 운세를 확인해보세요</p>
+        </div>
+
+        <!-- 이름 -->
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">이름</label>
+            <input type="text" name="name" id="name" placeholder="이름을 입력해주세요" class="w-full border-0 border-b border-gray-200 py-3 text-[16px] focus:border-orange-400 outline-none transition-colors bg-transparent">
+        </div>
+
+        <!-- 성별 -->
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">성별</label>
+            <input type="hidden" name="gender" id="hiddenGender" value="F">
+            <div class="flex gap-2">
+                <button type="button" onclick="setGender('F')" id="btnF" class="flex-1 py-3.5 rounded-2xl border-[1.5px] border-orange-400 font-bold text-[16px] bg-orange-50 text-orange-600 transition-all">여자</button>
+                <button type="button" onclick="setGender('M')" id="btnM" class="flex-1 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-[16px] transition-all">남자</button>
+            </div>
+        </div>
+
+        <!-- 생년월일시 -->
+        <div class="space-y-4">
+            <label class="font-bold text-[17px] text-[#333]">생년월일시</label>
+            <div class="flex gap-2">
+                <select name="calendar_type" id="calendarType" class="input-box w-[120px] text-center text-black font-medium">
+                    <option value="양력">양력</option>
+                    <option value="음력">음력</option>
+                    <option value="음력(윤달)">음력(윤달)</option>
+                </select>
+                <input type="text" name="birth_date" id="birthDate" maxlength="10" placeholder="1990/01/15" class="input-box flex-1 text-center" oninput="maskDate(this)" required>
+                <input type="text" name="birth_time" id="birthTime" maxlength="5" placeholder="14:30" class="input-box w-[100px] text-center" oninput="maskTime(this)" required>
+            </div>
+            
+            <input type="hidden" name="use_yajas_i" id="hiddenYajas" value="false">
+            <div class="flex gap-6 pt-1">
+                <div onclick="handleToggle('timeUnknown')" class="toggle-btn" id="toggle_timeUnknown">
+                    <div class="circle"></div>
+                    <span>시간 모름</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 태어난 도시 -->
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">태어난 도시</label>
+            <input type="hidden" name="location" id="hiddenLocation" value="">
+            <div onclick="openCitySheet()" id="displayLocation" class="input-box cursor-pointer flex justify-between items-center bg-white">
+                <span id="locText" class="text-[#b5b5b5]">시군 단위로 검색하세요</span>
+                <svg class="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+        </div>
+
+        <!-- 연애/결혼 상태 -->
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">연애 상태</label>
+            <input type="hidden" name="relationship_status" id="hiddenRelationship" value="single">
+            <div class="flex gap-2">
+                <button type="button" onclick="setRelationship('single')" id="btnSingle" class="flex-1 py-3 rounded-2xl border-[1.5px] border-orange-400 font-medium text-[15px] bg-orange-50 text-orange-600 transition-all">솔로</button>
+                <button type="button" onclick="setRelationship('couple')" id="btnCouple" class="flex-1 py-3 rounded-2xl border border-gray-200 text-gray-400 text-[15px] transition-all">연애중</button>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <label class="font-bold text-[17px] text-[#333]">결혼 상태</label>
+            <input type="hidden" name="marriage_status" id="hiddenMarriage" value="single">
+            <div class="flex gap-2">
+                <button type="button" onclick="setMarriage('single')" id="btnUnmarried" class="flex-1 py-3 rounded-2xl border-[1.5px] border-orange-400 font-medium text-[15px] bg-orange-50 text-orange-600 transition-all">미혼</button>
+                <button type="button" onclick="setMarriage('married')" id="btnMarried" class="flex-1 py-3 rounded-2xl border border-gray-200 text-gray-400 text-[15px] transition-all">기혼</button>
+            </div>
+        </div>
+
+        <button type="button" onclick="submitFortune()" class="w-full gradient-btn text-white py-4.5 rounded-full font-bold text-[18px] mt-6 shadow-lg transition-all hover:shadow-xl">
+            오늘의 운세 보기 ✨
+        </button>
+    </form>
+
+    <!-- 도시 선택 바텀시트 -->
+    <div id="sheetOverlay" onclick="closeCitySheet()" class="sheet-overlay fixed inset-0 bg-black/40 z-40"></div>
+    <div id="citySheet" class="fixed bottom-0 left-0 right-0 bg-white z-50 rounded-t-[36px] p-7 h-[85vh] flex flex-col shadow-2xl">
+        <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-8"></div>
+        <div class="relative mb-4">
+            <input type="text" id="citySearch" oninput="searchCity(this.value)" placeholder="도시명 또는 군 단위 검색 (예: 양평)" class="input-box w-full pr-12 !text-black border-[#e5e5e5]">
+            <svg class="absolute right-4 top-3.5 w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <div id="cityResults" class="flex-1 overflow-y-auto space-y-1 pt-4 border-t border-gray-100 no-scrollbar">
+            <p class="text-center py-20 text-[#999]">전국 160여 개 시·군 검색이 가능합니다.</p>
+        </div>
+    </div>
+
+    <script>
+        let fortuneState = { gender: 'F', timeUnknown: false, location: '', relationship: 'single', marriage: 'single' };
+        const KOREA_CITIES = {{ cities|tojson }};
+
+        function maskDate(obj) {
+            let val = obj.value.replace(/\D/g, "");
+            let res = "";
+            if (val.length > 0) {
+                res += val.substring(0, 4);
+                if (val.length >= 4) { res += "/"; if (val.length > 4) { res += val.substring(4, 6); if (val.length >= 6) { res += "/"; if (val.length > 6) res += val.substring(6, 8); } } }
+            }
+            obj.value = res;
+        }
+
+        function maskTime(obj) {
+            let val = obj.value.replace(/\D/g, "");
+            let res = "";
+            if (val.length > 0) { res += val.substring(0, 2); if (val.length >= 2) { res += ":"; if (val.length > 2) res += val.substring(2, 4); } }
+            obj.value = res;
+        }
+
+        function handleToggle(key) {
+            fortuneState[key] = !fortuneState[key];
+            updateToggleUI(key);
+            const timeInput = document.getElementById('birthTime');
+            timeInput.style.opacity = fortuneState.timeUnknown ? "0.3" : "1";
+            timeInput.disabled = fortuneState.timeUnknown;
+            if(fortuneState.timeUnknown) timeInput.value = "12:00";
+        }
+
+        function updateToggleUI(key) {
+            const el = document.getElementById('toggle_' + key);
+            if (fortuneState[key]) el.classList.add('active');
+            else el.classList.remove('active');
+        }
+
+        function searchCity(val) {
+            const results = document.getElementById('cityResults');
+            if (!val) { results.innerHTML = '<p class="text-center py-20 text-[#999]">전국 도시명을 입력해주세요.</p>'; return; }
+            const filtered = KOREA_CITIES.filter(city => city.includes(val));
+            results.innerHTML = filtered.map(city => `<div onclick="selectCity('${city}')" class="py-4 px-2 text-[17px] text-[#333] cursor-pointer hover:bg-orange-50 border-b border-gray-100">${city}</div>`).join('');
+            if (filtered.length === 0) results.innerHTML = '<p class="text-center py-20 text-[#999]">검색 결과가 없습니다.</p>';
+        }
+
+        function selectCity(city) {
+            fortuneState.location = city;
+            document.getElementById('hiddenLocation').value = city;
+            const locText = document.getElementById('locText');
+            locText.innerText = city; locText.classList.replace('text-[#b5b5b5]', 'text-black');
+            closeCitySheet();
+        }
+
+        function setGender(g) {
+            fortuneState.gender = g;
+            document.getElementById('hiddenGender').value = g;
+            document.getElementById('btnF').className = g === 'F' ? 'flex-1 py-3.5 rounded-2xl border-[1.5px] border-orange-400 font-bold text-[16px] bg-orange-50 text-orange-600' : 'flex-1 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-[16px]';
+            document.getElementById('btnM').className = g === 'M' ? 'flex-1 py-3.5 rounded-2xl border-[1.5px] border-orange-400 font-bold text-[16px] bg-orange-50 text-orange-600' : 'flex-1 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-[16px]';
+        }
+
+        function setRelationship(status) {
+            fortuneState.relationship = status;
+            document.getElementById('hiddenRelationship').value = status;
+            document.getElementById('btnSingle').className = status === 'single' ? 'flex-1 py-3 rounded-2xl border-[1.5px] border-orange-400 font-medium text-[15px] bg-orange-50 text-orange-600' : 'flex-1 py-3 rounded-2xl border border-gray-200 text-gray-400 text-[15px]';
+            document.getElementById('btnCouple').className = status === 'couple' ? 'flex-1 py-3 rounded-2xl border-[1.5px] border-orange-400 font-medium text-[15px] bg-orange-50 text-orange-600' : 'flex-1 py-3 rounded-2xl border border-gray-200 text-gray-400 text-[15px]';
+        }
+
+        function setMarriage(status) {
+            fortuneState.marriage = status;
+            document.getElementById('hiddenMarriage').value = status;
+            document.getElementById('btnUnmarried').className = status === 'single' ? 'flex-1 py-3 rounded-2xl border-[1.5px] border-orange-400 font-medium text-[15px] bg-orange-50 text-orange-600' : 'flex-1 py-3 rounded-2xl border border-gray-200 text-gray-400 text-[15px]';
+            document.getElementById('btnMarried').className = status === 'married' ? 'flex-1 py-3 rounded-2xl border-[1.5px] border-orange-400 font-medium text-[15px] bg-orange-50 text-orange-600' : 'flex-1 py-3 rounded-2xl border border-gray-200 text-gray-400 text-[15px]';
+        }
+
+        function openCitySheet() { document.getElementById('sheetOverlay').classList.add('show'); document.getElementById('citySheet').classList.add('show'); setTimeout(() => document.getElementById('citySearch').focus(), 300); }
+        function closeCitySheet() { document.getElementById('sheetOverlay').classList.remove('show'); document.getElementById('citySheet').classList.remove('show'); }
+
+        function submitFortune() {
+            const date = document.getElementById('birthDate').value;
+            const time = document.getElementById('birthTime').value;
+            const loc = fortuneState.location;
+
+            if(!date || date.length < 10) return alert("생년월일을 정확히 입력해주세요 (YYYY/MM/DD).");
+            if(!fortuneState.timeUnknown && (!time || time.length < 5)) return alert("태어난 시간을 입력해주세요.");
+            if(!loc) return alert("태어난 도시를 선택해주세요.");
+
+            document.getElementById('fortuneForm').submit();
+        }
+    </script>
+</body>
+</html>
