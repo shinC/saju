@@ -14,6 +14,7 @@ import saju_constants as sc
 from saju_engine import SajuEngine 
 from FortuneBridge import FortuneBridge
 from fortune_generator import FortuneGenerator, get_daily_fortune
+from lifetime_fortune import LifetimeFortuneGenerator
 
 app = FastAPI(title="포스텔러 만세력 2.2")
 templates = Jinja2Templates(directory="templates")
@@ -24,10 +25,11 @@ try:
     engine = SajuEngine("./data/manse_data.json", "./data/term_data.json")
     bridge = FortuneBridge("./data/ilju_data.json")
     fortune_gen = FortuneGenerator(fortune_bridge=bridge)
+    lifetime_gen = LifetimeFortuneGenerator(saju_engine=engine, fortune_bridge=bridge)
     print("✅ 엔진 및 브릿지 로드 완료")
 except Exception as e:
     traceback.print_exc()
-    engine, bridge, fortune_gen = None, None, None
+    engine, bridge, fortune_gen, lifetime_gen = None, None, None, None
 
 HAN_MAP = {
     '甲':'갑','乙':'을','丙':'병','丁':'정','戊':'무','己':'기','庚':'경','辛':'신','壬':'임','癸':'계',
@@ -349,6 +351,97 @@ def re_analyze(request: Request):
     except Exception as e:
         print(f"상세 에러 로그: {e}")
         return {"error": f"서버 내부 오류: {str(e)}"}
+
+
+@app.get("/lifetime", response_class=HTMLResponse)
+async def lifetime_input_page(request: Request):
+    city_list = list(sc.CITY_DATA.keys())
+    return templates.TemplateResponse("lifetime_input.html", {
+        "request": request,
+        "cities": city_list
+    })
+
+
+@app.post("/lifetime_web", response_class=HTMLResponse)
+async def lifetime_web(
+    request: Request,
+    name: str = Form("회원"),
+    gender: str = Form(...),
+    birth_date: str = Form(...),
+    birth_time: str = Form(...),
+    calendar_type: str = Form(...),
+    location: str = Form(...)
+):
+    if engine is None or lifetime_gen is None:
+        return templates.TemplateResponse("lifetime_input.html", {
+            "request": request,
+            "cities": list(sc.CITY_DATA.keys()),
+            "error": "엔진이 로드되지 않았습니다."
+        })
+
+    try:
+        formatted_date = birth_date.replace("/", "-")
+        birth_str = f"{formatted_date} {birth_time}"
+
+        result = lifetime_gen.generate(
+            birth_str=birth_str,
+            gender=gender,
+            location=location,
+            name=name if name else "회원",
+            calendar_type=calendar_type
+        )
+
+        if "error" in result:
+            return templates.TemplateResponse("lifetime_input.html", {
+                "request": request,
+                "cities": list(sc.CITY_DATA.keys()),
+                "error": result["error"]
+            })
+
+        return templates.TemplateResponse("lifetime_result.html", {
+            "request": request,
+            "fortune": result
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return templates.TemplateResponse("lifetime_input.html", {
+            "request": request,
+            "cities": list(sc.CITY_DATA.keys()),
+            "error": f"평생운세 생성 중 오류가 발생했습니다: {str(e)}"
+        })
+
+
+@app.get("/api/lifetime-fortune")
+async def get_lifetime_fortune_api(
+    birth: str,
+    gender: str,
+    location: str,
+    name: str = "회원",
+    calendar_type: str = "양력"
+):
+    if engine is None or lifetime_gen is None:
+        raise HTTPException(status_code=500, detail="엔진이 로드되지 않았습니다.")
+    
+    try:
+        result = lifetime_gen.generate(
+            birth_str=birth,
+            gender=gender,
+            location=location,
+            name=name,
+            calendar_type=calendar_type
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"평생운세 생성 중 오류: {str(e)}")
 
 
 if __name__ == "__main__":

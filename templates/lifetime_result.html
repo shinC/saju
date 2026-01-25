@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>평생운세 결과</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background: linear-gradient(180deg, #f8f4ff 0%, #f0e8ff 100%); min-height: 100vh; }
+        .section-card { background: white; border-radius: 24px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(139, 92, 246, 0.08); }
+        .section-title { font-size: 18px; font-weight: 700; color: #7c3aed; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .section-content { font-size: 16px; line-height: 1.85; color: #333; text-align: justify; }
+        .section-content p { margin-bottom: 12px; }
+        .section-content p:last-child { margin-bottom: 0; }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; padding: 12px 8px; border-radius: 12px; transition: all 0.2s; min-width: 70px; }
+        .nav-btn.active { background: #f3e8ff; }
+        .nav-btn span { font-size: 11px; color: #666; margin-top: 4px; }
+        .nav-btn.active span { color: #7c3aed; font-weight: 600; }
+        .header-gradient { background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%); }
+        .ilju-badge { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; }
+    </style>
+</head>
+<body class="pb-24">
+    <div class="header-gradient text-white p-6 pb-8">
+        <div class="flex items-center justify-between mb-4">
+            <a href="/lifetime" class="text-white/80 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </a>
+            <h1 class="text-lg font-bold">평생운세</h1>
+            <div class="w-6"></div>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl">
+                {% if fortune.gender == 'M' %}👨{% else %}👩{% endif %}
+            </div>
+            <div>
+                <h2 class="text-xl font-bold">{{ fortune.name }}님</h2>
+                <p class="text-white/80 text-sm">{{ fortune.birth }}</p>
+                <div class="ilju-badge inline-block px-3 py-1 rounded-full text-xs font-medium text-amber-800 mt-2">
+                    {{ fortune.ilju }} {{ fortune.ilju_info.title if fortune.ilju_info else '' }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="px-4 -mt-4">
+        <div class="section-card" id="section-overall">
+            <div class="section-title">
+                <span class="text-2xl">🌟</span> 총운 (평생운세)
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.overall.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-daeun">
+            <div class="section-title">
+                <span class="text-2xl">🔮</span> 대운풀이
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.daeun.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-wealth">
+            <div class="section-title">
+                <span class="text-2xl">💰</span> 재물운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.wealth.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-love">
+            <div class="section-title">
+                <span class="text-2xl">💕</span> 애정운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.love.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-marriage">
+            <div class="section-title">
+                <span class="text-2xl">💒</span> 결혼운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.marriage.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-career">
+            <div class="section-title">
+                <span class="text-2xl">💼</span> 직업운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.career.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-business">
+            <div class="section-title">
+                <span class="text-2xl">🏢</span> 사업운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.business.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-social">
+            <div class="section-title">
+                <span class="text-2xl">🤝</span> 대인운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.social.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-card" id="section-health">
+            <div class="section-title">
+                <span class="text-2xl">💪</span> 건강운
+            </div>
+            <div class="section-content">
+                {% for paragraph in fortune.health.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if fortune.from_cache %}
+        <div class="text-center text-xs text-gray-400 mt-4 mb-8">
+            캐시된 결과 · {{ fortune.generated_at }}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-2 flex justify-around items-center shadow-lg">
+        <button onclick="scrollToSection('overall')" class="nav-btn active" id="nav-overall">
+            <span class="text-xl">🌟</span>
+            <span>총운</span>
+        </button>
+        <button onclick="scrollToSection('wealth')" class="nav-btn" id="nav-wealth">
+            <span class="text-xl">💰</span>
+            <span>재물</span>
+        </button>
+        <button onclick="scrollToSection('love')" class="nav-btn" id="nav-love">
+            <span class="text-xl">💕</span>
+            <span>애정</span>
+        </button>
+        <button onclick="scrollToSection('career')" class="nav-btn" id="nav-career">
+            <span class="text-xl">💼</span>
+            <span>직업</span>
+        </button>
+        <button onclick="scrollToSection('health')" class="nav-btn" id="nav-health">
+            <span class="text-xl">💪</span>
+            <span>건강</span>
+        </button>
+    </div>
+
+    <script>
+        function scrollToSection(sectionId) {
+            const element = document.getElementById('section-' + sectionId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('nav-' + sectionId).classList.add('active');
+        }
+
+        const sections = ['overall', 'daeun', 'wealth', 'love', 'marriage', 'career', 'business', 'social', 'health'];
+        const navMapping = {
+            'overall': 'overall', 'daeun': 'overall',
+            'wealth': 'wealth',
+            'love': 'love', 'marriage': 'love',
+            'career': 'career', 'business': 'career',
+            'social': 'health', 'health': 'health'
+        };
+
+        window.addEventListener('scroll', () => {
+            let currentSection = 'overall';
+            sections.forEach(sectionId => {
+                const element = document.getElementById('section-' + sectionId);
+                if (element) {
+                    const rect = element.getBoundingClientRect();
+                    if (rect.top <= 150) {
+                        currentSection = sectionId;
+                    }
+                }
+            });
+            
+            const navId = navMapping[currentSection];
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            const navBtn = document.getElementById('nav-' + navId);
+            if (navBtn) navBtn.classList.add('active');
+        });
+    </script>
+</body>
+</html>
