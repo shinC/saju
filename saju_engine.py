@@ -71,24 +71,36 @@ class SajuEngine:
         b_idx = sc.BRANCHES.index(ganzi[1])
         return sc.STEMS[(s_idx + 1) % 10] + sc.BRANCHES[(b_idx + 1) % 12]
 
-    def _apply_solar_correction(self, dt_raw, yG, mG):
-        """절기 입입 시각을 정밀 비교하여 월건을 보정합니다."""
-        l_term_data, _ = self._get_solar_terms(dt_raw)
+    def _apply_solar_correction(self, dt_raw, yG, mG, lng_off=0):
+        """절기 입입 시각을 정밀 비교하여 년주/월건을 보정합니다.
         
-        # _get_solar_terms에서 생성한 dt_obj(datetime 객체)를 안전하게 추출
-        if isinstance(l_term_data, dict):
-            l_term_dt = l_term_data.get('dt_obj') or l_term_data.get('dt')
+        Args:
+            dt_raw: 지역시 보정된 생년월일시
+            yG: 년주 (간지)
+            mG: 월주 (간지)
+            lng_off: 경도 보정 분(분), 절입 시간에도 동일 적용
+        """
+        l_term_data, n_term_data = self._get_solar_terms(dt_raw)
+        
+        # 다음 절기(n_term) 기준으로 판단 - 해당 절기 시간 이후면 해당 월로 진입
+        if isinstance(n_term_data, dict):
+            n_term_dt = n_term_data.get('dt_obj') or n_term_data.get('dt')
+            n_term_name = n_term_data.get('term', '')
         else:
-            l_term_dt = l_term_data
+            n_term_dt = n_term_data
+            n_term_name = ''
 
-        # 생시가 입절 시각보다 같거나 늦으면 다음 달로 보정
-        if dt_raw >= l_term_dt:
-            # 월별 지지 매핑 (10월 한로 이후는 반드시 '戌')
-            month_to_branch_idx = {2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10, 11:11, 12:0, 1:1}
-            expected_b = sc.BRANCHES[month_to_branch_idx.get(l_term_dt.month, 0)]
-            
-            if mG[1] != expected_b:
-                mG = self._get_next_ganzi(mG)
+        # [포스텔러 방식] 모든 절기에 지역시 보정 적용
+        n_term_dt_adjusted = n_term_dt + timedelta(minutes=lng_off) if lng_off else n_term_dt
+
+        # 생시가 다음 절기 입절 시각을 넘으면 해당 월(및 년)로 보정
+        # [포스텔러 방식] 정확히 같은 시간이면 이전 월 유지
+        if dt_raw > n_term_dt_adjusted:
+            # 입춘이면 년주도 함께 변경
+            if n_term_name == '입춘':
+                yG = self._get_next_ganzi(yG)
+            # 월주 변경
+            mG = self._get_next_ganzi(mG)
                 
         return yG, mG
     
@@ -815,7 +827,8 @@ class SajuEngine:
         dt_solar = dt_raw + timedelta(minutes=self._get_historical_correction(dt_raw) + lng_off)
         
         # 3. 야자시/조자시 판정 및 DB 데이터 로드
-        jasi, fetch_dt = self._get_jasi_type(dt_solar), dt_solar
+        # [중요] 조자시/야자시 판정은 원본 시간 기준 (경도 보정 전)
+        jasi, fetch_dt = self._get_jasi_type(dt_raw), dt_solar
         if not use_yajas_i and jasi == "YAJAS-I": 
             fetch_dt = dt_solar + timedelta(hours=2)
             
@@ -823,26 +836,39 @@ class SajuEngine:
         if not day_data: return {"error": "DB 데이터가 없습니다."}
         
         # 4. [절기 보정] 입절 시각을 정밀 비교하여 월건(mG) 확정
-        yG, mG = self._apply_solar_correction(dt_raw, day_data['yG'], day_data['mG'])
+        # 중요: 지역시 보정된 시간(dt_solar)과 절입 시각을 비교해야 함
+        # [포스텔러 방식] 절입 시간에도 lng_off 보정 적용
+        yG, mG = self._apply_solar_correction(dt_solar, day_data['yG'], day_data['mG'], lng_off)
         
         # 5. [수정] 시주 및 일주 결정 (경도 보정값 반영)
         h_idx = ((dt_solar.hour * 60 + dt_solar.minute + 60) // 120) % 12
         
-        # [중요] 모든 기준 날짜를 보정된 dt_solar의 날짜로 고정합니다.
-        solar_date_str = dt_solar.strftime("%Y%m%d")
-        next_solar_date_str = (dt_solar + timedelta(days=1)).strftime("%Y%m%d")
-        
-        curr_day_data = self.m_db.get(solar_date_str)
-        next_day_data = self.m_db.get(next_solar_date_str)
-
-        if jasi == "YAJAS-I":
-            # 야자시(23:00~): 날짜는 오늘(12/31), 시주 기준은 내일(1/1)
-            target_dG = curr_day_data['dG'] if use_yajas_i else next_day_data['dG']
-            ref_gan = next_day_data['dG'][0]
+        # [중요] 조자시는 원본 시간 기준, 그 외는 보정된 시간 기준
+        if jasi == "JOJAS-I":
+            # 조자시: 원본 시간 기준으로 날짜 계산 (00:00~01:00는 전날 일주 사용)
+            raw_date_str = dt_raw.strftime("%Y%m%d")
+            prev_raw_date_str = (dt_raw - timedelta(days=1)).strftime("%Y%m%d")
+            curr_day_data = self.m_db.get(raw_date_str)
+            prev_day_data = self.m_db.get(prev_raw_date_str)
+            next_day_data = None  # 조자시에는 사용 안함
+            # 조자시: 일주는 전날, 시주 천간은 당일 기준
+            target_dG = prev_day_data['dG'] if prev_day_data else curr_day_data['dG']
+            ref_gan = curr_day_data['dG'][0]
         else:
-            # 조자시 포함 일반 시간: 날짜와 시주 기준 모두 현재 보정된 날짜
-            target_dG = curr_day_data['dG']
-            ref_gan = target_dG[0]
+            # 야자시 및 일반 시간: 보정된 시간 기준
+            solar_date_str = dt_solar.strftime("%Y%m%d")
+            next_solar_date_str = (dt_solar + timedelta(days=1)).strftime("%Y%m%d")
+            curr_day_data = self.m_db.get(solar_date_str)
+            next_day_data = self.m_db.get(next_solar_date_str)
+            
+            if jasi == "YAJAS-I":
+                # 야자시(23:00~): 일주는 오늘 유지, 시주 기준은 내일
+                target_dG = curr_day_data['dG'] if use_yajas_i else next_day_data['dG']
+                ref_gan = next_day_data['dG'][0]
+            else:
+                # 일반 시간: 날짜와 시주 기준 모두 현재 보정된 날짜
+                target_dG = curr_day_data['dG']
+                ref_gan = target_dG[0]
 
         # 최종 시주 천간 계산
         hG_gan = sc.STEMS[(sc.HG_START_IDX[ref_gan] + h_idx) % 10]
