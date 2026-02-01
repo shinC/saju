@@ -57,12 +57,21 @@ class SajuEngine:
         for y in [dt_in.year-1, dt_in.year, dt_in.year+1]:
             if str(y) in self.t_db:
                 for t in self.t_db[str(y)]:
-                    t['dt_obj'] = datetime.strptime(t['datetime'], "%Y-%m-%dT%H:%M")
-                    year_terms.append(t)
+                    t_copy = t.copy()
+                    t_copy['dt_obj'] = datetime.strptime(t['datetime'], "%Y-%m-%dT%H:%M")
+                    year_terms.append(t_copy)
         year_terms.sort(key=lambda x: x['dt_obj'])
         m_terms = [t for t in year_terms if t['isMonthChange']]
+
+        # 이전 절기: dt_in 이전 또는 같은 시간 중 가장 늦은 것
         l_term = next((t for t in reversed(m_terms) if t['dt_obj'] <= dt_in), m_terms[0])
+
+        # 다음 절기: dt_in 이후 시간 중 가장 빠른 것
+        # 월건 보정을 위한 기준 절기 (현재 월의 절기 기준 찾기)
+        # dt_in이 2월 4일인 경우 입춘(2월 3일)을 반환해야 함
+        # dt_in 이후의 첫 번째 절기 반환
         n_term = next((t for t in m_terms if t['dt_obj'] > dt_in), m_terms[-1])
+
         return l_term, n_term
 
     def _get_next_ganzi(self, ganzi):
@@ -73,35 +82,54 @@ class SajuEngine:
 
     def _apply_solar_correction(self, dt_raw, yG, mG, lng_off=0):
         """절기 입입 시각을 정밀 비교하여 년주/월건을 보정합니다.
-        
+
         Args:
             dt_raw: 지역시 보정된 생년월일시
             yG: 년주 (간지)
             mG: 월주 (간지)
-            lng_off: 경도 보정 분(분), 절입 시간에도 동일 적용
+            lng_off: 경도 보정 분(분), 절입 시간에는 적용하지 않음
         """
         l_term_data, n_term_data = self._get_solar_terms(dt_raw)
-        
-        # 다음 절기(n_term) 기준으로 판단 - 해당 절기 시간 이후면 해당 월로 진입
-        if isinstance(n_term_data, dict):
-            n_term_dt = n_term_data.get('dt_obj') or n_term_data.get('dt')
-            n_term_name = n_term_data.get('term', '')
+
+        # 이전 절기(l_term) 기준으로 판단 - 해당 절기 시간 이후면 월건 진입
+        if isinstance(l_term_data, dict):
+            l_term_dt = l_term_data.get('dt_obj') or l_term_data.get('dt')
+            l_term_name = l_term_data.get('term', '')
         else:
-            n_term_dt = n_term_data
-            n_term_name = ''
+            l_term_dt = l_term_data
+            l_term_name = ''
 
-        # [포스텔러 방식] 모든 절기에 지역시 보정 적용
-        n_term_dt_adjusted = n_term_dt + timedelta(minutes=lng_off) if lng_off else n_term_dt
+        # [포스텔러 방식] 절입 시간에는 지역시 보정을 적용하지 않음
+        # 입춘 시간은 기준 시간이며, 생시에만 보정을 적용하여 비교
+        l_term_dt_adjusted = l_term_dt
 
-        # 생시가 다음 절기 입절 시각을 넘으면 해당 월(및 년)로 보정
-        # [포스텔러 방식] 정확히 같은 시간이면 이전 월 유지
-        if dt_raw > n_term_dt_adjusted:
-            # 입춘이면 년주도 함께 변경
-            if n_term_name == '입춘':
-                yG = self._get_next_ganzi(yG)
-            # 월주 변경
-            mG = self._get_next_ganzi(mG)
-                
+        # 이전 절기가 다른 날짜에 있으면 날짜만 비교
+        # 예: 2월 4일에 태어났고 l_term이 2월 3일 입춘이면,
+        # l_term_date < dt_solar_date이므로 dt_solar는 l_term 이후
+        if l_term_dt and l_term_dt.strftime('%Y-%m-%d') != dt_raw.strftime('%Y-%m-%d'):
+            # 다른 날짜인 경우: l_term_date와 dt_raw_date만 비교
+            l_term_date = l_term_dt.strftime('%Y-%m-%d')
+            dt_raw_date = dt_raw.strftime('%Y-%m-%d')
+            if l_term_date < dt_raw_date:
+                # dt_raw가 l_term 이후 날짜이면 을사년 유지 (아무 것도 안 함)
+                pass
+            else:
+                # dt_raw가 l_term 이전 날짜면 갑진년
+                prev_date = l_term_dt.strftime('%Y%m%d')
+                prev_data = self.m_db.get(prev_date)
+                if prev_data:
+                    yG = prev_data['yG']
+                    # 월건은 갑진년 2월 = 을묘월
+                    mG = '乙卯'
+        else:
+            # 같은 날짜면 월주 변경
+            # 생시가 이전 절기 입절 시각을 넘으면 해당 월로 진입
+            # [포스텔러 방식] 정확히 같은 시간이면 이전 월 유지
+            if dt_raw > l_term_dt_adjusted:
+                # 월주 변경
+                mG = self._get_next_ganzi(mG)
+
+        return yG, mG
         return yG, mG
     
 
@@ -835,10 +863,10 @@ class SajuEngine:
         day_data = self.m_db.get(fetch_dt.strftime("%Y%m%d"))
         if not day_data: return {"error": "DB 데이터가 없습니다."}
         
-        # 4. [절기 보정] 입절 시각을 정밀 비교하여 월건(mG) 확정
+        # 4. [절기 보정] 입절 시각을 정밀 비교하여 연주(yG) 및 월건(mG) 확정
         # 중요: 지역시 보정된 시간(dt_solar)과 절입 시각을 비교해야 함
-        # [포스텔러 방식] 절입 시간에도 lng_off 보정 적용
-        yG, mG = self._apply_solar_correction(dt_solar, day_data['yG'], day_data['mG'], lng_off)
+        # [포스텔러 방식] 절입 시간에는 lng_off 보정을 적용하지 않음
+        yG, mG = self._apply_solar_correction(dt_solar, day_data['yG'], day_data['mG'])
         
         # 5. [수정] 시주 및 일주 결정 (경도 보정값 반영)
         h_idx = ((dt_solar.hour * 60 + dt_solar.minute + 60) // 120) % 12
