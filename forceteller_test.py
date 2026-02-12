@@ -200,16 +200,65 @@ class ForceTellerTester:
             except:
                 pass
             
-            # 확인 페이지에서 만세력 보러가기 클릭
-            await page.click("button:has-text('만세력 보러가기')")
+            # 확인 페이지에서 만세력 보러가기 클릭 (재시도 로직 강화)
+            max_retries = 3
+            result_page_loaded = False
             
-            # 결과 페이지 대기 (테이블이 로드될 때까지)
-            try:
-                await page.wait_for_url("**/result", timeout=30000)
-            except:
-                # URL 변경 안되면 요소로 확인
-                await page.wait_for_selector("table", timeout=30000)
+            for i in range(max_retries):
+                try:
+                    # 팝업이 가리고 있을 수 있으므로 제거 시도
+                    await page.evaluate("""
+                        () => {
+                            document.querySelectorAll('.MuiDialog-root, .MuiModal-root, [role="presentation"]').forEach(el => el.remove());
+                        }
+                    """)
+                    
+                    # 버튼 클릭 시도
+                    btn = page.locator("button:has-text('만세력 보러가기')")
+                    if await btn.count() > 0 and await btn.is_visible():
+                        await btn.click(timeout=5000)
+                    
+                    # 결과 페이지 진입 확인
+                    try:
+                        await page.wait_for_url("**/result", timeout=8000)
+                        result_page_loaded = True
+                        break
+                    except:
+                        # 테이블이 보이면 성공으로 간주
+                        if await page.locator("table").count() > 0:
+                            result_page_loaded = True
+                            break
+                    
+                    if i < max_retries - 1:
+                        print(f"  [INFO] 결과 페이지 이동 대기/재시도 중... ({i+1}/{max_retries})")
+                        await asyncio.sleep(2)
+                        
+                except Exception as e:
+                    print(f"  [WARN] 페이지 이동 재시도 중 에러: {e}")
+                    await asyncio.sleep(1)
+            
+            # 최종 확인 (타임아웃 60초로 연장)
+            if not result_page_loaded:
+                try:
+                    await page.wait_for_url("**/result", timeout=60000)
+                except:
+                    # URL 변경 안되면 요소로 확인
+                    await page.wait_for_selector("table", timeout=60000)
             await asyncio.sleep(2)
+            
+            # 핵심 콘텐츠 로딩 확인 - "오행과 십성 분석" 텍스트가 나타나야 함
+            content_loaded = False
+            try:
+                ohaeng_section = page.get_by_text("오행과 십성 분석")
+                await ohaeng_section.wait_for(timeout=15000)
+                content_loaded = True
+            except:
+                print(f"  [WARN] 페이지 콘텐츠가 완전히 로드되지 않음 - 스킵합니다")
+                await page.screenshot(path=f"./data/debug_test_{test_case['no']}_content_fail.png")
+                result["error"] = "콘텐츠 로딩 실패 (오행과 십성 분석 섹션 없음)"
+                result["forceteller"] = {}
+                await page.close()
+                return result
             
             # 반복적으로 다이얼로그 닫기 시도 (최대 10회)
             for attempt in range(10):
@@ -234,13 +283,13 @@ class ForceTellerTester:
             
             await asyncio.sleep(0.5)
             
-            # 4. 결과 스크래핑
-            result["forceteller"] = await self._scrape_result(page)
+            # 4. 메타 데이터 스크래핑 (사주팔자, 띠, 보정, 신살 - 체크박스 영향 없음)
+            meta_result = await self._scrape_result(page)
             
-            # 5. 합/조후 보정 체크 후 재스크래핑
-            # 체크박스: data-test-id="hap-adjust" (합), 조후는 두 번째 체크박스
+            # 기본 상태 (둘 다 OFF) 데이터 스크래핑
+            base_result = await self._scrape_full_result(page)
+            result["forceteller"] = {**meta_result, **base_result}
             
-            # 팝업 닫기 헬퍼 함수
             async def close_popups():
                 for _ in range(5):
                     dialog = page.locator(".MuiDialog-root, .MuiModal-root")
@@ -256,56 +305,87 @@ class ForceTellerTester:
                         """)
                         await asyncio.sleep(0.2)
             
+            async def force_remove_popups():
+                await page.evaluate('''
+                    () => {
+                        document.querySelectorAll(".MuiDialog-root, .MuiModal-root, [role='presentation']").forEach(el => el.remove());
+                        document.querySelectorAll("[aria-hidden='true']").forEach(el => el.removeAttribute("aria-hidden"));
+                        document.body.style.overflow = "auto";
+                    }
+                ''')
+                await asyncio.sleep(0.3)
+            
+            async def click_hap_checkbox():
+                try:
+                    await force_remove_popups()
+                    hap_label = page.get_by_text("합에 따른 오행 변화 적용")
+                    if await hap_label.count() > 0:
+                        await hap_label.locator("..").click(force=True, timeout=5000)
+                    else:
+                        hap_checkbox = page.locator("[data-test-id='hap-adjust']")
+                        if await hap_checkbox.count() > 0:
+                            await hap_checkbox.click(force=True, timeout=5000)
+                        else:
+                            raise Exception("합 체크박스 요소를 찾을 수 없음")
+                    return True
+                except Exception as e:
+                    print(f"  [WARN] 합 체크박스 클릭 실패: {e}")
+                    return False
+            
+            async def click_johoo_checkbox():
+                try:
+                    await force_remove_popups()
+                    johoo_label = page.get_by_text("조후와 궁성 보정값 적용")
+                    if await johoo_label.count() > 0:
+                        await johoo_label.locator("..").click(force=True, timeout=5000)
+                    else:
+                        johoo_checkbox = page.locator("[data-test-id='johu-adjust']")
+                        if await johoo_checkbox.count() > 0:
+                            await johoo_checkbox.click(force=True, timeout=5000)
+                        else:
+                            raise Exception("조후 체크박스 요소를 찾을 수 없음")
+                    return True
+                except Exception as e:
+                    print(f"  [WARN] 조후 체크박스 클릭 실패: {e}")
+                    return False
+            
             await close_popups()
             
-            try:
-                # "합에 따른 오행 변화 적용" 체크박스 클릭
-                hap_checkbox = page.locator("[data-test-id='hap-adjust']")
-                if await hap_checkbox.count() > 0:
-                    await hap_checkbox.click(timeout=5000)
-                    print("  [INFO] 합에 따른 오행 변화 적용 체크됨")
-                else:
-                    await page.locator("div._adjust_1wjz5_75").first.click(force=True, timeout=5000)
-            except Exception as e1:
-                print(f"  [WARN] 합 체크박스 클릭 실패: {e1}")
+            # 5. 합만 ON (hap)
+            if await click_hap_checkbox():
+                print("  [INFO] 합에 따른 오행 변화 적용 체크됨")
+            await asyncio.sleep(1.5)
+            # await page.screenshot(path=f"./data/debug_test_{test_case['no']}_step1_hap.png")
+            await close_popups()
+            result["forceteller_hap"] = await self._scrape_full_result(page)
             
-            await asyncio.sleep(1.0)
-            await close_popups()  # 합 체크 후 팝업 닫기
+            # 6. 둘 다 ON (adj) - 합 ON 상태에서 조후 추가
+            if await click_johoo_checkbox():
+                print("  [INFO] 조후와 궁성 보정값 적용 체크됨")
+            await asyncio.sleep(1.5)
+            # await page.screenshot(path=f"./data/debug_test_{test_case['no']}_step2_both.png")
+            await close_popups()
+            result["forceteller_adj"] = await self._scrape_full_result(page)
             
-            try:
-                # "조후와 궁성 보정값 적용" 체크박스 클릭
-                # 텍스트 기반 클릭을 우선 시도 (가장 확실)
-                await page.get_by_text("조후와 궁성 보정값 적용").click(force=True, timeout=5000)
-                print("  [INFO] 조후와 궁성 보정값 적용 클릭 시도됨")
-            except Exception as e2:
-                print(f"  [WARN] 조후 체크박스 클릭 실패: {e2}")
+            # 7. 조후만 ON (johoo) - 합 OFF
+            if await click_hap_checkbox():
+                print("  [INFO] 합 체크 해제됨")
+            await asyncio.sleep(1.5)
+            # await page.screenshot(path=f"./data/debug_test_{test_case['no']}_step3_johoo.png")
+            await close_popups()
+            result["forceteller_johoo"] = await self._scrape_full_result(page)
             
-            await asyncio.sleep(2.0)
-            await close_popups()  # 합 체크 후 팝업이 뜰 수 있음
-            
-            try:
-                # "조후와 궁성 보정값 적용" 체크박스 클릭 (두 번째 _adjust_ div)
-                johu_div = page.locator("div._adjust_1wjz5_75").nth(1)
-                if await johu_div.count() > 0:
-                    await johu_div.click(timeout=5000)
-                    print("  [INFO] 조후와 궁성 보정값 적용 체크됨")
-                else:
-                    # 대안: 텍스트로 찾기
-                    await page.get_by_text("조후와 궁성 보정값 적용").locator("..").click(force=True, timeout=5000)
-            except Exception as e2:
-                print(f"  [WARN] 조후 체크박스 클릭 실패: {e2}")
-            
-            # 체크박스 적용 후 데이터 갱신 대기 (시간 충분히)
-            await asyncio.sleep(3.0)
-            
-            # 디버그: 체크박스 적용 상태 스크린샷
-            await page.screenshot(path=f"./data/debug_test_{test_case['no']}_adjusted.png")
-            
-            result["forceteller_adjusted"] = await self._scrape_adjusted_result(page)
+            # 디버그 스크린샷
+            await page.screenshot(path=f"./data/debug_test_{test_case['no']}_final.png")
             
         except Exception as e:
             result["error"] = str(e)
             print(f"[ERROR] Test #{test_case['no']}: {e}")
+            # 에러 시 스크린샷 저장
+            try:
+                await page.screenshot(path=f"./data/debug_test_{test_case['no']}_error.png")
+            except:
+                pass
         
         finally:
             await page.close()
@@ -313,38 +393,31 @@ class ForceTellerTester:
         return result
     
     async def _scrape_result(self, page: Page) -> dict:
-        """기본 결과 스크래핑"""
+        """기본 메타 결과 스크래핑 (사주팔자, 띠, 보정, 신살 - 체크박스 영향 없음)"""
         import re
         data = {}
         
-        # 보정 정보 추출 (결과 페이지 헤더에서)
-        # 형식: "1988/05/15 08:58 여자 서울특별시 (지역시 -32분, 서머타임 -60분)"
         data["correction_minutes"] = 0
         data["summer_time_minutes"] = 0
         try:
             page_text = await page.content()
-            # 지역시 보정
             match = re.search(r'지역시\s*(-?\d+)분', page_text)
             if match:
                 data["correction_minutes"] = int(match.group(1))
-            # 서머타임 보정
             match = re.search(r'서머타임\s*(-?\d+)분', page_text)
             if match:
                 data["summer_time_minutes"] = int(match.group(1))
         except:
             pass
         
-        # 띠 (예: "경오(하얀 말)") - 색상 키워드로 찾기
         data["zodiac"] = ""
         colors = ["하얀", "검은", "붉은", "푸른", "노란"]
         for color in colors:
             try:
-                # 패턴: "간지(색상 동물)" 형태
                 els = page.locator(f"*:has-text('({color}')")
                 for i in range(await els.count()):
                     text = await els.nth(i).text_content(timeout=2000)
                     if text:
-                        # "경오(하얀 말)" 패턴 추출
                         match = re.search(rf'([가-힣]{{2}})\(({color}\s*[가-힣]+)\)', text)
                         if match:
                             data["zodiac"] = f"{match.group(1)}({match.group(2)})"
@@ -354,50 +427,54 @@ class ForceTellerTester:
             except:
                 pass
         
-        # 사주팔자 (년월일시) - MuiGrid 구조에서 추출
-        # 순서: 생시 → 생일 → 생월 → 생년 (오른쪽→왼쪽)
         pillars = {"년주": "", "월주": "", "일주": "", "시주": ""}
         label_to_pillar = {"생년": "년주", "생월": "월주", "생일": "일주", "생시": "시주"}
         
         for label, pillar_key in label_to_pillar.items():
             try:
-                # _sGridHeader_ 클래스에서 헤더 찾기
                 header = page.locator(f"div[class*='_sGridHeader_']:has-text('{label}')")
                 if await header.count() > 0:
-                    # 같은 컬럼의 _간지_ 클래스 요소들 (천간, 지지)
                     column = header.locator("xpath=parent::div")
                     ganji_els = column.locator("div[class*='_간지_']")
                     if await ganji_els.count() >= 2:
                         cheongan = await ganji_els.nth(0).text_content(timeout=2000)
                         jiji = await ganji_els.nth(1).text_content(timeout=2000)
-                        # "경庚" → "경", "오午" → "오"
-                        if cheongan:
-                            cheongan = cheongan.strip()[0] if len(cheongan.strip()) >= 1 else ""
-                        if jiji:
-                            jiji = jiji.strip()[0] if len(jiji.strip()) >= 1 else ""
-                        pillars[pillar_key] = cheongan + jiji
+                        cheongan_char = cheongan.strip()[0] if cheongan and len(cheongan.strip()) >= 1 else ""
+                        jiji_char = jiji.strip()[0] if jiji and len(jiji.strip()) >= 1 else ""
+                        pillars[pillar_key] = cheongan_char + jiji_char
             except Exception as e:
                 print(f"  [DEBUG] Pillar extraction error for {label}: {e}")
         data["pillars"] = pillars
         
-        # 오행 분포 (테이블에서 추출)
+        try:
+            sinsal_section = page.locator("p").filter(has_text="신살과 길성")
+            sinsal_list = sinsal_section.locator("xpath=following-sibling::p").first
+            text = await sinsal_list.text_content(timeout=5000)
+            data["sinsal"] = text.strip() if text else ""
+        except:
+            data["sinsal"] = ""
+        
+        return data
+    
+    async def _scrape_full_result(self, page: Page) -> dict:
+        """체크박스 조합별 전체 결과 스크래핑 (오행, 십성, 신강, 용신)"""
+        data = {}
+        
         elements = {}
         elem_map = {"목(木)": "목", "화(火)": "화", "토(土)": "토", "금(金)": "금", "수(水)": "수"}
         for elem, key in elem_map.items():
             try:
-                # cell 형식: "목(木)" 다음 셀에 "0.0% 부족" 형태
                 cell = page.locator(f"td:has-text('{elem}')").first
                 row = cell.locator("xpath=ancestor::tr")
                 cells = row.locator("td")
                 if await cells.count() >= 2:
                     value_text = await cells.nth(1).text_content(timeout=3000)
-                    pct = self._extract_percentage(value_text)
+                    pct = self._extract_percentage(value_text or "")
                     elements[key] = pct
             except:
                 elements[key] = 0.0
         data["elements"] = elements
         
-        # 십성 분포 (테이블에서 추출)
         ten_gods = {}
         tg_map = {
             "비견(比肩)": "비견", "겁재(劫財)": "겁재", "식신(食神)": "식신", 
@@ -421,21 +498,17 @@ class ForceTellerTester:
                 ten_gods[tg_short] = 0.0
         data["ten_gods"] = ten_gods
         
-        # 신강/신약 (텍스트에서 추출 - "중화신강" 단독 요소)
         data["strength"] = ""
         strength_keywords = ["중화신강", "중화신약", "신강", "신약", "태강", "태약", "극왕", "극약"]
         try:
-            # 전체 페이지 텍스트에서 키워드 찾기
             page_text = await page.content()
             for kw in strength_keywords:
                 if kw in page_text:
-                    # 가장 구체적인 키워드부터 매칭
                     data["strength"] = kw
                     break
         except:
             pass
         
-        # 용신 (data-test-id="guardian" 영역에서 조후용신, 억부용신 모두 추출)
         yongsin_list = []
         try:
             guardian_div = page.locator("[data-test-id='guardian']")
@@ -444,68 +517,9 @@ class ForceTellerTester:
                 for i in range(await yongsin_els.count()):
                     text = await yongsin_els.nth(i).text_content(timeout=2000)
                     if text:
-                        # "수(조후용신)", "목(억부용신)" 형태
                         yongsin_list.append(text.strip())
         except Exception as e:
             print(f"  [DEBUG] Yongsin extraction error: {e}")
-        data["yongsin"] = ", ".join(yongsin_list) if yongsin_list else ""
-        
-        # 신살과 길성
-        try:
-            sinsal_section = page.locator("p").filter(has_text="신살과 길성")
-            sinsal_list = sinsal_section.locator("xpath=following-sibling::p").first
-            text = await sinsal_list.text_content(timeout=5000)
-            data["sinsal"] = text.strip() if text else ""
-        except:
-            data["sinsal"] = ""
-        
-        return data
-    
-    async def _scrape_adjusted_result(self, page: Page) -> dict:
-        """합/조후 보정 적용 결과 스크래핑"""
-        import re
-        data = {}
-        
-        # 보정된 오행 분포 (체크박스 클릭 후 테이블 값이 바뀜)
-        elements = {}
-        elem_map = {"목(木)": "목", "화(火)": "화", "토(土)": "토", "금(金)": "금", "수(水)": "수"}
-        for elem, key in elem_map.items():
-            try:
-                cell = page.locator(f"td:has-text('{elem}')").first
-                row = cell.locator("xpath=ancestor::tr")
-                cells = row.locator("td")
-                if await cells.count() >= 2:
-                    value_text = await cells.nth(1).text_content(timeout=3000)
-                    pct = self._extract_percentage(value_text)
-                    elements[key] = pct
-            except:
-                elements[key] = 0.0
-        data["elements"] = elements
-        
-        # 보정된 신강/신약 (페이지 텍스트에서 추출)
-        data["strength"] = ""
-        strength_keywords = ["중화신강", "중화신약", "신강", "신약", "태강", "태약", "극왕", "극약"]
-        try:
-            page_text = await page.content()
-            for kw in strength_keywords:
-                if kw in page_text:
-                    data["strength"] = kw
-                    break
-        except:
-            pass
-        
-        # 보정된 용신 (data-test-id="guardian" 영역에서 추출)
-        yongsin_list = []
-        try:
-            guardian_div = page.locator("[data-test-id='guardian']")
-            if await guardian_div.count() > 0:
-                yongsin_els = guardian_div.locator("p")
-                for i in range(await yongsin_els.count()):
-                    text = await yongsin_els.nth(i).text_content(timeout=2000)
-                    if text:
-                        yongsin_list.append(text.strip())
-        except Exception as e:
-            print(f"  [DEBUG] Adjusted yongsin extraction error: {e}")
         data["yongsin"] = ", ".join(yongsin_list) if yongsin_list else ""
         
         return data
@@ -522,22 +536,13 @@ class ForceTellerTester:
         match = re.search(r'(\d+\.?\d*)%', text or "")
         return float(match.group(1)) if match else 0.0
     
-    def run_my_engine(self, test_case: dict) -> dict:
-        """내 엔진으로 동일 케이스 실행"""
-        birth_str = f"{test_case['date']} {test_case['time']}"
-        gender = "M" if test_case["gender"] == "M" else "F"
-        
-        result = self.engine.analyze(
-            birth_str=birth_str,
-            gender=gender,
-            location=test_case["location"],
-            use_yajas_i=True,
-            calendar_type="양력"
-        )
-        
-        if "error" in result:
+    def _process_engine_result(self, result: dict) -> dict:
+        """엔진 결과에서 필요한 데이터 추출 (오행, 십성, 신강, 용신, 기둥)"""
+        if "error" in result: 
+            print(f"  [DEBUG] Engine Error: {result['error']}")
             return {"error": result["error"]}
         
+        # 기둥 추출
         pillars_data = result.get("pillars", [])
         pillars_list = []
         for i in range(4):
@@ -552,22 +557,69 @@ class ForceTellerTester:
             else:
                 pillars_list.append("")
         
-        yongsin_info = result.get("yongsin_info")
+        # 용신 추출
+        yongsin_info = result.get("yongsin_detail") # yongsin_info -> yongsin_detail
         if isinstance(yongsin_info, dict):
             main_yongsin = yongsin_info.get("main_yongsin", "")
         else:
             main_yongsin = ""
+            
+        # 십성 추출
+        ten_gods = result.get("tengod_analysis_dict", {}) # tengod_dict_raw -> tengod_analysis_dict
         
         return {
             "pillars": pillars_list,
             "elements": result.get("scores", {}),
+            "ten_gods": ten_gods,
             "strength": result.get("status", ""),
             "power": result.get("power", 0),
             "yongsin": main_yongsin
         }
     
+    def run_my_engine(self, test_case: dict) -> dict:
+        """내 엔진으로 동일 케이스 4가지 조합 실행"""
+        birth_str = f"{test_case['date']} {test_case['time']}"
+        gender = "M" if test_case["gender"] == "M" else "F"
+        
+        base_args = {
+            "birth_str": birth_str,
+            "gender": gender,
+            "location": test_case["location"],
+            "use_yajas_i": True,
+            "calendar_type": "양력"
+        }
+        
+        results = {}
+        
+        # 1. 기본 (둘 다 False)
+        # 주의: saju_engine analyze는 딕셔너리를 반환해야 함
+        res_base = self.engine.analyze(**base_args, use_hap_correction=False, use_johoo_correction=False)
+        # 디버그: 결과 키 출력
+        if "error" in res_base:
+            print(f"  [DEBUG] Engine Error: {res_base['error']}")
+        else:
+            print(f"  [DEBUG] Engine Result Keys: {list(res_base.keys())}")
+            if "scores" in res_base:
+                print(f"  [DEBUG] Scores: {res_base['scores']}")
+            
+        results["base"] = self._process_engine_result(res_base)
+        
+        # 2. 합만 (hap=True)
+        res_hap = self.engine.analyze(**base_args, use_hap_correction=True, use_johoo_correction=False)
+        results["hap"] = self._process_engine_result(res_hap)
+        
+        # 3. 조후만 (johoo=True)
+        res_johoo = self.engine.analyze(**base_args, use_hap_correction=False, use_johoo_correction=True)
+        results["johoo"] = self._process_engine_result(res_johoo)
+        
+        # 4. 둘 다 (adj=True, True)
+        res_adj = self.engine.analyze(**base_args, use_hap_correction=True, use_johoo_correction=True)
+        results["adj"] = self._process_engine_result(res_adj)
+        
+        return results
+    
     def compare_results(self, ft_result: dict, my_result: dict) -> dict:
-        """포스텔러 결과와 내 엔진 결과 비교"""
+        """포스텔러 결과와 내 엔진 결과 비교 (기본 설정 기준)"""
         comparison = {
             "pillar_match": True,
             "element_diff_max": 0.0,
@@ -575,9 +627,13 @@ class ForceTellerTester:
             "differences": []
         }
         
+        # 기본(base) 결과끼리 비교
+        ft_base = ft_result.get("forceteller", {})
+        my_base = my_result.get("base", {})
+        
         # 오행 비교
-        ft_elements = ft_result.get("forceteller", {}).get("elements", {})
-        my_elements = my_result.get("elements", {})
+        ft_elements = ft_base.get("elements", {})
+        my_elements = my_base.get("elements", {})
         
         elem_map = {"목": "목", "화": "화", "토": "토", "금": "금", "수": "수"}
         for k, v in ft_elements.items():
@@ -589,88 +645,183 @@ class ForceTellerTester:
                 comparison["differences"].append(f"오행 {k}: FT={v}%, MY={my_val}%")
         
         # 신강/신약 비교
-        ft_strength = ft_result.get("forceteller", {}).get("strength", "")
-        my_strength = my_result.get("strength", "")
+        ft_strength = ft_base.get("strength", "")
+        my_strength = my_base.get("strength", "")
         if ft_strength and my_strength:
             comparison["strength_match"] = ft_strength in my_strength or my_strength in ft_strength
         
         return comparison
     
     def save_to_db(self, result: dict, my_result: dict, comparison: dict):
-        """결과를 DB에 저장"""
         conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         
         test_case = result.get("input", {})
-        ft = result.get("forceteller", {})
-        ft_adj = result.get("forceteller_adjusted", {})
-        ft_pillars = ft.get("pillars", {})
-        ft_ten_gods = ft.get("ten_gods", {})
+        ft_meta = result.get("forceteller", {})
+        ft_base = result.get("forceteller", {})
+        ft_hap = result.get("forceteller_hap", {})
+        ft_johoo = result.get("forceteller_johoo", {})
+        ft_adj = result.get("forceteller_adj", {})
+        ft_pillars = ft_meta.get("pillars", {})
+        
+        # 내 엔진 결과
+        my_base = my_result.get("base", {})
+        my_hap = my_result.get("hap", {})
+        my_johoo = my_result.get("johoo", {})
+        my_adj = my_result.get("adj", {})
+        my_pillars = my_base.get("pillars", ["", "", "", ""])
+        
+        def get_elem(d, key): return d.get("elements", {}).get(key, 0)
+        def get_tg(d, key): 
+            val = d.get("ten_gods", {}).get(key, 0)
+            if isinstance(val, dict): return val.get("count", 0)
+            return val
         
         cursor.execute("""
             INSERT INTO test_results (
                 test_no, test_date, input_date, input_time, gender, location, test_purpose,
                 ft_year_pillar, ft_month_pillar, ft_day_pillar, ft_hour_pillar,
                 ft_correction_minutes, ft_summer_time_minutes, ft_zodiac,
+                
                 ft_wood, ft_fire, ft_earth, ft_metal, ft_water,
+                ft_wood_hap, ft_fire_hap, ft_earth_hap, ft_metal_hap, ft_water_hap,
+                ft_wood_johoo, ft_fire_johoo, ft_earth_johoo, ft_metal_johoo, ft_water_johoo,
                 ft_wood_adj, ft_fire_adj, ft_earth_adj, ft_metal_adj, ft_water_adj,
+                
                 ft_bigyeon, ft_geobje, ft_siksin, ft_sanggwan, ft_pyeonjae,
                 ft_jeongjae, ft_pyeongwan, ft_jeonggwan, ft_pyeonin, ft_jeongin,
-                ft_strength, ft_strength_adj, ft_yongsin, ft_yongsin_adj, ft_sinsal,
+                
+                ft_bigyeon_hap, ft_geobje_hap, ft_siksin_hap, ft_sanggwan_hap, ft_pyeonjae_hap,
+                ft_jeongjae_hap, ft_pyeongwan_hap, ft_jeonggwan_hap, ft_pyeonin_hap, ft_jeongin_hap,
+                
+                ft_bigyeon_johoo, ft_geobje_johoo, ft_siksin_johoo, ft_sanggwan_johoo, ft_pyeonjae_johoo,
+                ft_jeongjae_johoo, ft_pyeongwan_johoo, ft_jeonggwan_johoo, ft_pyeonin_johoo, ft_jeongin_johoo,
+                
+                ft_bigyeon_adj, ft_geobje_adj, ft_siksin_adj, ft_sanggwan_adj, ft_pyeonjae_adj,
+                ft_jeongjae_adj, ft_pyeongwan_adj, ft_jeonggwan_adj, ft_pyeonin_adj, ft_jeongin_adj,
+                
+                ft_strength, ft_strength_hap, ft_strength_johoo, ft_strength_adj,
+                ft_yongsin, ft_yongsin_hap, ft_yongsin_johoo, ft_yongsin_adj,
+                ft_sinsal,
+                
+                my_year_pillar, my_month_pillar, my_day_pillar, my_hour_pillar,
+                
                 my_wood, my_fire, my_earth, my_metal, my_water,
+                my_wood_hap, my_fire_hap, my_earth_hap, my_metal_hap, my_water_hap,
+                my_wood_johoo, my_fire_johoo, my_earth_johoo, my_metal_johoo, my_water_johoo,
+                my_wood_adj, my_fire_adj, my_earth_adj, my_metal_adj, my_water_adj,
+                
+                my_bigyeon, my_geobje, my_siksin, my_sanggwan, my_pyeonjae,
+                my_jeongjae, my_pyeongwan, my_jeonggwan, my_pyeonin, my_jeongin,
+                
+                my_bigyeon_hap, my_geobje_hap, my_siksin_hap, my_sanggwan_hap, my_pyeonjae_hap,
+                my_jeongjae_hap, my_pyeongwan_hap, my_jeonggwan_hap, my_pyeonin_hap, my_jeongin_hap,
+                
+                my_bigyeon_johoo, my_geobje_johoo, my_siksin_johoo, my_sanggwan_johoo, my_pyeonjae_johoo,
+                my_jeongjae_johoo, my_pyeongwan_johoo, my_jeonggwan_johoo, my_pyeonin_johoo, my_jeongin_johoo,
+                
+                my_bigyeon_adj, my_geobje_adj, my_siksin_adj, my_sanggwan_adj, my_pyeonjae_adj,
+                my_jeongjae_adj, my_pyeongwan_adj, my_jeonggwan_adj, my_pyeonin_adj, my_jeongin_adj,
+                
                 my_strength, my_yongsin,
+                my_strength_hap, my_yongsin_hap,
+                my_strength_johoo, my_yongsin_johoo,
+                my_strength_adj, my_yongsin_adj,
+                
                 pillar_match, element_diff_max, strength_match
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?,
+                
+                ?, ?, ?, ?,
+                
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+
+                ?, ?,
+                ?, ?,
+                ?, ?,
+                ?, ?,
+
+                ?, ?, ?
+            )
         """, (
-            test_case.get("no"),
-            datetime.now().isoformat(),
-            test_case.get("date"),
-            test_case.get("time"),
-            test_case.get("gender"),
-            test_case.get("location"),
-            test_case.get("purpose"),
-            ft_pillars.get("년주", ""),
-            ft_pillars.get("월주", ""),
-            ft_pillars.get("일주", ""),
-            ft_pillars.get("시주", ""),
-            ft.get("correction_minutes", result.get("correction_minutes", 0)),
-            ft.get("summer_time_minutes", result.get("summer_time_minutes", 0)),
-            ft.get("zodiac", ""),
-            ft.get("elements", {}).get("목", 0),
-            ft.get("elements", {}).get("화", 0),
-            ft.get("elements", {}).get("토", 0),
-            ft.get("elements", {}).get("금", 0),
-            ft.get("elements", {}).get("수", 0),
-            ft_adj.get("elements", {}).get("목", 0),
-            ft_adj.get("elements", {}).get("화", 0),
-            ft_adj.get("elements", {}).get("토", 0),
-            ft_adj.get("elements", {}).get("금", 0),
-            ft_adj.get("elements", {}).get("수", 0),
-            ft_ten_gods.get("비견", 0),
-            ft_ten_gods.get("겁재", 0),
-            ft_ten_gods.get("식신", 0),
-            ft_ten_gods.get("상관", 0),
-            ft_ten_gods.get("편재", 0),
-            ft_ten_gods.get("정재", 0),
-            ft_ten_gods.get("편관", 0),
-            ft_ten_gods.get("정관", 0),
-            ft_ten_gods.get("편인", 0),
-            ft_ten_gods.get("정인", 0),
-            ft.get("strength", ""),
-            ft_adj.get("strength", ""),
-            ft.get("yongsin", ""),
-            ft_adj.get("yongsin", ""),
-            ft.get("sinsal", ""),
-            my_result.get("elements", {}).get("목", 0),
-            my_result.get("elements", {}).get("화", 0),
-            my_result.get("elements", {}).get("토", 0),
-            my_result.get("elements", {}).get("금", 0),
-            my_result.get("elements", {}).get("수", 0),
-            my_result.get("strength", ""),
-            my_result.get("yongsin", ""),
-            1 if comparison.get("pillar_match") else 0,
-            comparison.get("element_diff_max", 0),
-            1 if comparison.get("strength_match") else 0
+            test_case.get("no"), datetime.now().strftime("%Y-%m-%d %H:%M"),
+            test_case.get("date"), test_case.get("time"), test_case.get("gender"),
+            test_case.get("location"), test_case.get("purpose"),
+            
+            ft_pillars.get("년주"), ft_pillars.get("월주"), ft_pillars.get("일주"), ft_pillars.get("시주"),
+            ft_meta.get("correction_minutes"), ft_meta.get("summer_time_minutes"), ft_meta.get("zodiac"),
+            
+            get_elem(ft_base, "목"), get_elem(ft_base, "화"), get_elem(ft_base, "토"), get_elem(ft_base, "금"), get_elem(ft_base, "수"),
+            get_elem(ft_hap, "목"), get_elem(ft_hap, "화"), get_elem(ft_hap, "토"), get_elem(ft_hap, "금"), get_elem(ft_hap, "수"),
+            get_elem(ft_johoo, "목"), get_elem(ft_johoo, "화"), get_elem(ft_johoo, "토"), get_elem(ft_johoo, "금"), get_elem(ft_johoo, "수"),
+            get_elem(ft_adj, "목"), get_elem(ft_adj, "화"), get_elem(ft_adj, "토"), get_elem(ft_adj, "금"), get_elem(ft_adj, "수"),
+            
+            get_tg(ft_base, "비견"), get_tg(ft_base, "겁재"), get_tg(ft_base, "식신"), get_tg(ft_base, "상관"), get_tg(ft_base, "편재"),
+            get_tg(ft_base, "정재"), get_tg(ft_base, "편관"), get_tg(ft_base, "정관"), get_tg(ft_base, "편인"), get_tg(ft_base, "정인"),
+            
+            get_tg(ft_hap, "비견"), get_tg(ft_hap, "겁재"), get_tg(ft_hap, "식신"), get_tg(ft_hap, "상관"), get_tg(ft_hap, "편재"),
+            get_tg(ft_hap, "정재"), get_tg(ft_hap, "편관"), get_tg(ft_hap, "정관"), get_tg(ft_hap, "편인"), get_tg(ft_hap, "정인"),
+            
+            get_tg(ft_johoo, "비견"), get_tg(ft_johoo, "겁재"), get_tg(ft_johoo, "식신"), get_tg(ft_johoo, "상관"), get_tg(ft_johoo, "편재"),
+            get_tg(ft_johoo, "정재"), get_tg(ft_johoo, "편관"), get_tg(ft_johoo, "정관"), get_tg(ft_johoo, "편인"), get_tg(ft_johoo, "정인"),
+            
+            get_tg(ft_adj, "비견"), get_tg(ft_adj, "겁재"), get_tg(ft_adj, "식신"), get_tg(ft_adj, "상관"), get_tg(ft_adj, "편재"),
+            get_tg(ft_adj, "정재"), get_tg(ft_adj, "편관"), get_tg(ft_adj, "정관"), get_tg(ft_adj, "편인"), get_tg(ft_adj, "정인"),
+            
+            ft_base.get("strength"), ft_hap.get("strength"), ft_johoo.get("strength"), ft_adj.get("strength"),
+            ft_base.get("yongsin"), ft_hap.get("yongsin"), ft_johoo.get("yongsin"), ft_adj.get("yongsin"),
+            ft_meta.get("sinsal"),
+            
+            # 내 엔진 데이터
+            my_pillars[0], my_pillars[1], my_pillars[2], my_pillars[3],
+            
+            get_elem(my_base, "목"), get_elem(my_base, "화"), get_elem(my_base, "토"), get_elem(my_base, "금"), get_elem(my_base, "수"),
+            get_elem(my_hap, "목"), get_elem(my_hap, "화"), get_elem(my_hap, "토"), get_elem(my_hap, "금"), get_elem(my_hap, "수"),
+            get_elem(my_johoo, "목"), get_elem(my_johoo, "화"), get_elem(my_johoo, "토"), get_elem(my_johoo, "금"), get_elem(my_johoo, "수"),
+            get_elem(my_adj, "목"), get_elem(my_adj, "화"), get_elem(my_adj, "토"), get_elem(my_adj, "금"), get_elem(my_adj, "수"),
+            
+            get_tg(my_base, "비견"), get_tg(my_base, "겁재"), get_tg(my_base, "식신"), get_tg(my_base, "상관"), get_tg(my_base, "편재"),
+            get_tg(my_base, "정재"), get_tg(my_base, "편관"), get_tg(my_base, "정관"), get_tg(my_base, "편인"), get_tg(my_base, "정인"),
+            
+            get_tg(my_hap, "비견"), get_tg(my_hap, "겁재"), get_tg(my_hap, "식신"), get_tg(my_hap, "상관"), get_tg(my_hap, "편재"),
+            get_tg(my_hap, "정재"), get_tg(my_hap, "편관"), get_tg(my_hap, "정관"), get_tg(my_hap, "편인"), get_tg(my_hap, "정인"),
+            
+            get_tg(my_johoo, "비견"), get_tg(my_johoo, "겁재"), get_tg(my_johoo, "식신"), get_tg(my_johoo, "상관"), get_tg(my_johoo, "편재"),
+            get_tg(my_johoo, "정재"), get_tg(my_johoo, "편관"), get_tg(my_johoo, "정관"), get_tg(my_johoo, "편인"), get_tg(my_johoo, "정인"),
+            
+            get_tg(my_adj, "비견"), get_tg(my_adj, "겁재"), get_tg(my_adj, "식신"), get_tg(my_adj, "상관"), get_tg(my_adj, "편재"),
+            get_tg(my_adj, "정재"), get_tg(my_adj, "편관"), get_tg(my_adj, "정관"), get_tg(my_adj, "편인"), get_tg(my_adj, "정인"),
+            
+            my_base.get("strength"), my_base.get("yongsin"),
+            my_hap.get("strength"), my_hap.get("yongsin"),
+            my_johoo.get("strength"), my_johoo.get("yongsin"),
+            my_adj.get("strength"), my_adj.get("yongsin"),
+            
+            comparison["pillar_match"], comparison["element_diff_max"], comparison["strength_match"]
         ))
         
         conn.commit()
@@ -709,7 +860,7 @@ class ForceTellerTester:
                 
                 # 결과 출력
                 print(f"  [FT] 오행: {ft_result.get('forceteller', {}).get('elements', {})}")
-                print(f"  [MY] 오행: {my_result.get('elements', {})}")
+                print(f"  [MY] 오행: {my_result.get('base', {}).get('elements', {})}")
                 print(f"  [비교] 최대 오행 차이: {comparison['element_diff_max']:.1f}%")
                 print(f"  [비교] 신강/신약 일치: {'O' if comparison['strength_match'] else 'X'}")
                 

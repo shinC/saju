@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>테스트 결과 상세 - #{{ record.id }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; }
+        .section-title { @apply text-lg font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200; }
+        .pillar-cell { @apply text-center px-4 py-3 text-lg font-bold; }
+        .combo-label { @apply text-[10px] px-1.5 py-0.5 rounded-full font-medium; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <header class="mb-6 flex items-center justify-between">
+            <div>
+                <a href="/" class="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-block">&larr; 목록으로</a>
+                <h1 class="text-2xl font-bold text-gray-800">테스트 결과 #{{ record.id }}</h1>
+            </div>
+            <span class="px-3 py-1 bg-gray-800 text-white rounded-full text-sm">Test {{ record.test_no }}</span>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">입력 정보</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-gray-500 mb-1">날짜</div>
+                    <div class="font-bold text-gray-800">{{ record.input_date }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-gray-500 mb-1">시간</div>
+                    <div class="font-bold text-gray-800">{{ record.input_time }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-gray-500 mb-1">성별</div>
+                    <div class="font-bold text-gray-800">{{ '남자' if record.gender == 'M' else '여자' }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-gray-500 mb-1">지역</div>
+                    <div class="font-bold text-gray-800">{{ record.location }}</div>
+                </div>
+            </div>
+            {% if record.test_purpose %}
+            <div class="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                <span class="font-medium">테스트 목적:</span> {{ record.test_purpose }}
+            </div>
+            {% endif %}
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">사주팔자 비교</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="text-xs text-gray-500 uppercase">
+                            <th class="px-4 py-2 text-left w-24"></th>
+                            <th class="px-4 py-2 text-center">년주</th>
+                            <th class="px-4 py-2 text-center">월주</th>
+                            <th class="px-4 py-2 text-center">일주</th>
+                            <th class="px-4 py-2 text-center">시주</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-t border-gray-100">
+                            <td class="px-4 py-3 text-sm text-gray-500 font-medium">포스텔러</td>
+                            <td class="pillar-cell bg-blue-50 text-blue-700">{{ record.ft_year_pillar or '-' }}</td>
+                            <td class="pillar-cell bg-blue-50 text-blue-700">{{ record.ft_month_pillar or '-' }}</td>
+                            <td class="pillar-cell bg-blue-50 text-blue-700">{{ record.ft_day_pillar or '-' }}</td>
+                            <td class="pillar-cell bg-blue-50 text-blue-700">{{ record.ft_hour_pillar or '-' }}</td>
+                        </tr>
+                        <tr class="border-t border-gray-100">
+                            <td class="px-4 py-3 text-sm text-gray-500 font-medium">내 엔진</td>
+                            <td class="pillar-cell bg-green-50 text-green-700">{{ record.my_year_pillar or '-' }}</td>
+                            <td class="pillar-cell bg-green-50 text-green-700">{{ record.my_month_pillar or '-' }}</td>
+                            <td class="pillar-cell bg-green-50 text-green-700">{{ record.my_day_pillar or '-' }}</td>
+                            <td class="pillar-cell bg-green-50 text-green-700">{{ record.my_hour_pillar or '-' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <span class="text-gray-500">띠:</span>
+                    <span class="font-medium ml-2">{{ record.ft_zodiac or '-' }}</span>
+                </div>
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <span class="text-gray-500">보정:</span>
+                    <span class="font-medium ml-2">
+                        {{ record.ft_correction_minutes or 0 }}분
+                        {% if record.ft_summer_time_minutes %}(서머타임 {{ record.ft_summer_time_minutes }}분){% endif %}
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">오행 분포 (4가지 조합)</h2>
+            <div class="mb-4 flex flex-wrap gap-2 text-xs">
+                <span class="combo-label bg-gray-100 text-gray-600">기본: 둘 다 OFF</span>
+                <span class="combo-label bg-purple-100 text-purple-700">합: 합만 ON</span>
+                <span class="combo-label bg-orange-100 text-orange-700">조후: 조후만 ON</span>
+                <span class="combo-label bg-indigo-100 text-indigo-700">보정: 둘 다 ON</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-xs text-gray-500 uppercase border-b border-gray-200">
+                            <th class="px-2 py-2 text-left"></th>
+                            <th class="px-2 py-2 text-center text-green-600">목</th>
+                            <th class="px-2 py-2 text-center text-red-600">화</th>
+                            <th class="px-2 py-2 text-center text-yellow-600">토</th>
+                            <th class="px-2 py-2 text-center text-gray-500">금</th>
+                            <th class="px-2 py-2 text-center text-blue-600">수</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-gray-100">
+                            <td class="px-2 py-2 text-gray-500 font-medium">FT 기본</td>
+                            <td class="px-2 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_wood or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_fire or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_earth or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_metal or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_water or 0) }}%</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-purple-50/30">
+                            <td class="px-2 py-2 text-purple-600 font-medium">FT 합</td>
+                            <td class="px-2 py-2 text-center font-mono text-purple-700">{{ "%.1f"|format(record.ft_wood_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-purple-700">{{ "%.1f"|format(record.ft_fire_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-purple-700">{{ "%.1f"|format(record.ft_earth_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-purple-700">{{ "%.1f"|format(record.ft_metal_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-purple-700">{{ "%.1f"|format(record.ft_water_hap or 0) }}%</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-orange-50/30">
+                            <td class="px-2 py-2 text-orange-600 font-medium">FT 조후</td>
+                            <td class="px-2 py-2 text-center font-mono text-orange-700">{{ "%.1f"|format(record.ft_wood_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-orange-700">{{ "%.1f"|format(record.ft_fire_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-orange-700">{{ "%.1f"|format(record.ft_earth_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-orange-700">{{ "%.1f"|format(record.ft_metal_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-orange-700">{{ "%.1f"|format(record.ft_water_johoo or 0) }}%</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-indigo-50/30">
+                            <td class="px-2 py-2 text-indigo-600 font-medium">FT 보정</td>
+                            <td class="px-2 py-2 text-center font-mono text-indigo-700">{{ "%.1f"|format(record.ft_wood_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-indigo-700">{{ "%.1f"|format(record.ft_fire_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-indigo-700">{{ "%.1f"|format(record.ft_earth_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-indigo-700">{{ "%.1f"|format(record.ft_metal_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono text-indigo-700">{{ "%.1f"|format(record.ft_water_adj or 0) }}%</td>
+                        </tr>
+                        <!-- 내 엔진 섹션 -->
+                        <tr class="border-t-2 border-gray-200 bg-green-50/20">
+                            <td class="px-2 py-2 text-green-700 font-medium">MY 기본</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_wood or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_fire or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_earth or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_metal or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_water or 0) }}%</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-green-50/30">
+                            <td class="px-2 py-2 text-green-700 font-medium">MY 합</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_wood_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_fire_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_earth_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_metal_hap or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_water_hap or 0) }}%</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-green-50/40">
+                            <td class="px-2 py-2 text-green-700 font-medium">MY 조후</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_wood_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_fire_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_earth_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_metal_johoo or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_water_johoo or 0) }}%</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-green-50/50">
+                            <td class="px-2 py-2 text-green-700 font-medium">MY 보정</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_wood_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_fire_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_earth_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_metal_adj or 0) }}%</td>
+                            <td class="px-2 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_water_adj or 0) }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">십성 분포 (4가지 조합)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-200">
+                            <th class="px-1 py-2 text-left"></th>
+                            <th class="px-1 py-2 text-center">비견</th>
+                            <th class="px-1 py-2 text-center">겁재</th>
+                            <th class="px-1 py-2 text-center">식신</th>
+                            <th class="px-1 py-2 text-center">상관</th>
+                            <th class="px-1 py-2 text-center">편재</th>
+                            <th class="px-1 py-2 text-center">정재</th>
+                            <th class="px-1 py-2 text-center">편관</th>
+                            <th class="px-1 py-2 text-center">정관</th>
+                            <th class="px-1 py-2 text-center">편인</th>
+                            <th class="px-1 py-2 text-center">정인</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-gray-100">
+                            <td class="px-1 py-2 text-gray-500 font-medium">기본</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_bigyeon or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_geobje or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_siksin or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_sanggwan or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonjae or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongjae or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeongwan or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeonggwan or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonin or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongin or 0) }}</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-purple-50/30">
+                            <td class="px-1 py-2 text-purple-600 font-medium">합</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_bigyeon_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_geobje_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_siksin_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_sanggwan_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonjae_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongjae_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeongwan_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeonggwan_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonin_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongin_hap or 0) }}</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-orange-50/30">
+                            <td class="px-1 py-2 text-orange-600 font-medium">조후</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_bigyeon_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_geobje_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_siksin_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_sanggwan_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonjae_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongjae_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeongwan_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeonggwan_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonin_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongin_johoo or 0) }}</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-indigo-50/30">
+                            <td class="px-1 py-2 text-indigo-600 font-medium">보정</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_bigyeon_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_geobje_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_siksin_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_sanggwan_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonjae_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongjae_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeongwan_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeonggwan_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_pyeonin_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono">{{ "%.1f"|format(record.ft_jeongin_adj or 0) }}</td>
+                        </tr>
+                        <tr class="border-t-2 border-gray-200 bg-green-50/20">
+                            <td class="px-1 py-2 text-green-700 font-medium">MY 기본</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_bigyeon or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_geobje or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_siksin or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_sanggwan or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonjae or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongjae or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeongwan or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeonggwan or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonin or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongin or 0) }}</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-green-50/30">
+                            <td class="px-1 py-2 text-green-700 font-medium">MY 합</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_bigyeon_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_geobje_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_siksin_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_sanggwan_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonjae_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongjae_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeongwan_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeonggwan_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonin_hap or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongin_hap or 0) }}</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-green-50/40">
+                            <td class="px-1 py-2 text-green-700 font-medium">MY 조후</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_bigyeon_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_geobje_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_siksin_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_sanggwan_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonjae_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongjae_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeongwan_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeonggwan_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonin_johoo or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongin_johoo or 0) }}</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 bg-green-50/50">
+                            <td class="px-1 py-2 text-green-700 font-medium">MY 보정</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_bigyeon_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_geobje_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_siksin_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_sanggwan_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonjae_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongjae_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeongwan_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeonggwan_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_pyeonin_adj or 0) }}</td>
+                            <td class="px-1 py-2 text-center font-mono font-bold">{{ "%.1f"|format(record.my_jeongin_adj or 0) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">신강/신약 & 용신 (4가지 조합)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3">신강/신약</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between p-3 bg-gray-50 rounded-lg">
+                            <span class="text-gray-600">FT 기본</span>
+                            <span class="font-bold">{{ record.ft_strength or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-purple-50 rounded-lg">
+                            <span class="text-purple-600">FT 합</span>
+                            <span class="font-bold text-purple-700">{{ record.ft_strength_hap or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-orange-50 rounded-lg">
+                            <span class="text-orange-600">FT 조후</span>
+                            <span class="font-bold text-orange-700">{{ record.ft_strength_johoo or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-indigo-50 rounded-lg">
+                            <span class="text-indigo-600">FT 보정</span>
+                            <span class="font-bold text-indigo-700">{{ record.ft_strength_adj or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300 mt-2">
+                            <span class="text-green-700 font-medium">MY 기본</span>
+                            <span class="font-bold text-green-700">{{ record.my_strength or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300">
+                            <span class="text-green-700 font-medium">MY 합</span>
+                            <span class="font-bold text-green-700">{{ record.my_strength_hap or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300">
+                            <span class="text-green-700 font-medium">MY 조후</span>
+                            <span class="font-bold text-green-700">{{ record.my_strength_johoo or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300">
+                            <span class="text-green-700 font-medium">MY 보정</span>
+                            <span class="font-bold text-green-700">{{ record.my_strength_adj or '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3">용신</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between p-3 bg-gray-50 rounded-lg">
+                            <span class="text-gray-600">FT 기본</span>
+                            <span class="font-bold text-right max-w-[60%] truncate">{{ record.ft_yongsin or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-purple-50 rounded-lg">
+                            <span class="text-purple-600">FT 합</span>
+                            <span class="font-bold text-purple-700 text-right max-w-[60%] truncate">{{ record.ft_yongsin_hap or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-orange-50 rounded-lg">
+                            <span class="text-orange-600">FT 조후</span>
+                            <span class="font-bold text-orange-700 text-right max-w-[60%] truncate">{{ record.ft_yongsin_johoo or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-indigo-50 rounded-lg">
+                            <span class="text-indigo-600">FT 보정</span>
+                            <span class="font-bold text-indigo-700 text-right max-w-[60%] truncate">{{ record.ft_yongsin_adj or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300 mt-2">
+                            <span class="text-green-700 font-medium">MY 기본</span>
+                            <span class="font-bold text-green-700 text-right max-w-[60%] truncate">{{ record.my_yongsin or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300">
+                            <span class="text-green-700 font-medium">MY 합</span>
+                            <span class="font-bold text-green-700 text-right max-w-[60%] truncate">{{ record.my_yongsin_hap or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300">
+                            <span class="text-green-700 font-medium">MY 조후</span>
+                            <span class="font-bold text-green-700 text-right max-w-[60%] truncate">{{ record.my_yongsin_johoo or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between p-3 bg-green-100 rounded-lg border-2 border-green-300">
+                            <span class="text-green-700 font-medium">MY 보정</span>
+                            <span class="font-bold text-green-700 text-right max-w-[60%] truncate">{{ record.my_yongsin_adj or '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {% if record.ft_sinsal %}
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">신살 (포스텔러)</h2>
+            <p class="text-sm text-gray-600 leading-relaxed">{{ record.ft_sinsal }}</p>
+        </section>
+        {% endif %}
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="section-title">비교 결과 요약</h2>
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div class="p-4 rounded-lg {% if record.pillar_match == 1 %}bg-green-50{% elif record.pillar_match == 0 %}bg-red-50{% else %}bg-gray-50{% endif %}">
+                    <div class="text-xs text-gray-500 mb-1">사주 일치</div>
+                    <div class="text-2xl font-bold {% if record.pillar_match == 1 %}text-green-600{% elif record.pillar_match == 0 %}text-red-500{% else %}text-gray-400{% endif %}">
+                        {% if record.pillar_match == 1 %}O{% elif record.pillar_match == 0 %}X{% else %}-{% endif %}
+                    </div>
+                </div>
+                <div class="p-4 rounded-lg {% if record.element_diff_max is not none %}{% if record.element_diff_max <= 5 %}bg-green-50{% elif record.element_diff_max <= 15 %}bg-yellow-50{% else %}bg-red-50{% endif %}{% else %}bg-gray-50{% endif %}">
+                    <div class="text-xs text-gray-500 mb-1">최대 오행 차이</div>
+                    <div class="text-2xl font-bold {% if record.element_diff_max is not none %}{% if record.element_diff_max <= 5 %}text-green-600{% elif record.element_diff_max <= 15 %}text-yellow-600{% else %}text-red-500{% endif %}{% else %}text-gray-400{% endif %}">
+                        {% if record.element_diff_max is not none %}{{ "%.1f"|format(record.element_diff_max) }}%{% else %}-{% endif %}
+                    </div>
+                </div>
+                <div class="p-4 rounded-lg {% if record.strength_match == 1 %}bg-green-50{% elif record.strength_match == 0 %}bg-red-50{% else %}bg-gray-50{% endif %}">
+                    <div class="text-xs text-gray-500 mb-1">신강/신약 일치</div>
+                    <div class="text-2xl font-bold {% if record.strength_match == 1 %}text-green-600{% elif record.strength_match == 0 %}text-red-500{% else %}text-gray-400{% endif %}">
+                        {% if record.strength_match == 1 %}O{% elif record.strength_match == 0 %}X{% else %}-{% endif %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-8 text-center text-xs text-gray-400">
+            <p>생성일: {{ record.created_at or '-' }}</p>
+        </footer>
+    </div>
+</body>
+</html>

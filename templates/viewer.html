@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포스텔러 테스트 결과 뷰어</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; }
+        .pillar-box { min-width: 60px; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <header class="mb-8 flex justify-between items-end">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">포스텔러 테스트 결과 뷰어</h1>
+                <p class="text-sm text-gray-500 mt-1">DB에 저장된 포스텔러 vs 내 엔진 비교 결과</p>
+            </div>
+            <form action="/delete/all" method="POST" onsubmit="return confirm('정말 모든 데이터를 삭제하시겠습니까?');">
+                <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition">
+                    전체 삭제
+                </button>
+            </form>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-8">
+            <form method="GET" action="/" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">날짜</label>
+                    <input type="text" name="date" value="{{ search_date }}" 
+                           placeholder="1990-02-04"
+                           class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">시간</label>
+                    <input type="text" name="time" value="{{ search_time }}" 
+                           placeholder="11:14"
+                           class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">성별</label>
+                    <select name="gender" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        <option value="">전체</option>
+                        <option value="M" {% if search_gender == 'M' %}selected{% endif %}>남자</option>
+                        <option value="F" {% if search_gender == 'F' %}selected{% endif %}>여자</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">지역</label>
+                    <input type="text" name="location" value="{{ search_location }}" 
+                           placeholder="서울"
+                           class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300">
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition">
+                        검색
+                    </button>
+                    <a href="/" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition">
+                        초기화
+                    </a>
+                </div>
+            </form>
+        </section>
+
+        {% if search_performed %}
+        <p class="text-sm text-gray-500 mb-4">검색 결과: {{ records|length }}건</p>
+        {% endif %}
+
+        <section class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+                        <tr>
+                            <th class="px-4 py-3 text-left">ID</th>
+                            <th class="px-4 py-3 text-left">Test#</th>
+                            <th class="px-4 py-3 text-left">날짜</th>
+                            <th class="px-4 py-3 text-left">시간</th>
+                            <th class="px-4 py-3 text-center">성별</th>
+                            <th class="px-4 py-3 text-left">지역</th>
+                            <th class="px-4 py-3 text-center">사주팔자</th>
+                            <th class="px-4 py-3 text-center">주일치</th>
+                            <th class="px-4 py-3 text-center">오행차이</th>
+                            <th class="px-4 py-3 text-center">신강일치</th>
+                            <th class="px-4 py-3 text-left">생성일</th>
+                            <th class="px-4 py-3 text-center">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for r in records %}
+                        <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='/detail/{{ r.id }}'">
+                            <td class="px-4 py-3 text-gray-600">{{ r.id }}</td>
+                            <td class="px-4 py-3 font-medium">{{ r.test_no }}</td>
+                            <td class="px-4 py-3">{{ r.input_date }}</td>
+                            <td class="px-4 py-3">{{ r.input_time }}</td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="px-2 py-0.5 rounded-full text-xs {% if r.gender == 'M' %}bg-blue-100 text-blue-700{% else %}bg-pink-100 text-pink-700{% endif %}">
+                                    {{ '남' if r.gender == 'M' else '여' }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-gray-600">{{ r.location }}</td>
+                            <td class="px-4 py-3">
+                                <div class="flex gap-1 justify-center text-xs font-mono">
+                                    <span class="pillar-box px-2 py-1 bg-gray-100 rounded">{{ r.ft_year_pillar or '-' }}</span>
+                                    <span class="pillar-box px-2 py-1 bg-gray-100 rounded">{{ r.ft_month_pillar or '-' }}</span>
+                                    <span class="pillar-box px-2 py-1 bg-gray-100 rounded">{{ r.ft_day_pillar or '-' }}</span>
+                                    <span class="pillar-box px-2 py-1 bg-gray-100 rounded">{{ r.ft_hour_pillar or '-' }}</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {% if r.pillar_match == 1 %}
+                                <span class="text-green-600 font-bold">O</span>
+                                {% elif r.pillar_match == 0 %}
+                                <span class="text-red-500 font-bold">X</span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {% if r.element_diff_max is not none %}
+                                <span class="{% if r.element_diff_max <= 5 %}text-green-600{% elif r.element_diff_max <= 15 %}text-yellow-600{% else %}text-red-500{% endif %}">
+                                    {{ "%.1f"|format(r.element_diff_max) }}%
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {% if r.strength_match == 1 %}
+                                <span class="text-green-600 font-bold">O</span>
+                                {% elif r.strength_match == 0 %}
+                                <span class="text-red-500 font-bold">X</span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-gray-400 text-xs">{{ r.created_at[:16] if r.created_at else '-' }}</td>
+                            <td class="px-4 py-3 text-center" onclick="event.stopPropagation();">
+                                <form action="/delete/{{ r.id }}" method="POST" onsubmit="return confirm('삭제하시겠습니까?');" class="inline">
+                                    <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-xs">삭제</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="12" class="px-4 py-12 text-center text-gray-400">
+                                {% if search_performed %}
+                                검색 결과가 없습니다.
+                                {% else %}
+                                데이터가 없습니다. 테스트를 먼저 실행해주세요.
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="mt-8 text-center text-xs text-gray-400">
+            <p>포스텔러 만세력 자동 테스트 시스템</p>
+        </footer>
+    </div>
+</body>
+</html>
