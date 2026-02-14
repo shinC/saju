@@ -170,7 +170,10 @@ class SajuEngine:
         weights, hap_map = self._get_analysis_config(palja, use_hap_correction, use_johoo_correction)
         dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
         effective_elements = [sc.ELEMENT_MAP[char] for char in palja]
-        HAP_RATIO = 0.5
+        
+        # [수정] 합 적용 비율 하향 조정 (포스텔러 데이터 분석 결과 반영)
+        # 기존 0.5(50%) -> 0.3(30%)
+        HAP_RATIO = 0.3
 
         for i in range(8):
             orig_elem = sc.ELEMENT_MAP[palja[i]]
@@ -183,6 +186,22 @@ class SajuEngine:
                 effective_elements[i] = new_elem
             else:
                 dist_scores[orig_elem] += weight
+        
+        # [추가] 조후 보정 시 특정 오행 가산점 부여 (포스텔러 패턴 반영)
+        if use_johoo_correction:
+            month_b = palja[3] # 월지
+            bonus_elem = None
+            
+            if month_b in sc.WINTER_BS: bonus_elem = "화" # 겨울 -> 화 부족
+            elif month_b in sc.SUMMER_BS: bonus_elem = "수" # 여름 -> 수 부족
+            elif month_b in sc.SPRING_BS: bonus_elem = "금" # 봄 -> 금(관성) 필요? (상황에 따름)
+            elif month_b in sc.AUTUMN_BS: bonus_elem = "목" # 가을 -> 목(재성) 필요?
+            
+            # 포스텔러는 특히 수/화 조후를 강하게 봄
+            if bonus_elem in ["수", "화"]:
+                dist_scores[bonus_elem] += 15.0 # 15% 포인트 가산 (상향 조정)
+            elif bonus_elem:
+                dist_scores[bonus_elem] += 10.0 # 그 외 오행은 10% 가산
                 
         total = sum(dist_scores.values())
         for k in dist_scores:
@@ -234,6 +253,36 @@ class SajuEngine:
         
         if strong_count >= 5: strong_sum += 5.0
         elif strong_count <= 1: strong_sum -= 5.0
+
+        # [추가] 종격(쏠림) 보정 로직
+        # 특정 기운이 태왕할 경우, 일반적인 억부 점수를 왜곡시킴
+        # 식상/재성/관성이 태왕하면 일간은 극도로 약해짐 -> 점수 대폭 하향
+        # 인성/비겁이 태왕하면 일간은 극도로 강해짐 -> 점수 대폭 상향
+        
+        # effective_elements 기준 오행 카운트 (일간 제외)
+        elem_counts = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
+        for i, elem in enumerate(effective_elements):
+            if i != 4: elem_counts[elem] += weights[i] # 가중치 반영된 합
+            
+        total_weight_sum = sum(weights.values()) # 일간 제외 총 가중치 합
+        
+        # 가장 강한 오행 찾기
+        max_elem = max(elem_counts, key=elem_counts.get)
+        max_score = elem_counts[max_elem]
+        max_ratio = max_score / total_weight_sum
+        
+        relation = self._get_element_relation(me_elem, max_elem)
+        
+        # 쏠림 기준: 50% 이상이면 태왕으로 간주
+        if max_ratio >= 0.5:
+            if relation in ['식상', '재성', '관성']:
+                # 내 힘을 빼는 기운이 태왕 -> 극도로 신약해짐
+                strong_sum *= 0.5 # 점수 반토막 (극약 유도)
+                strong_sum -= 10.0
+            elif relation in ['인성', '비겁']:
+                # 나를 돕는 기운이 태왕 -> 극도로 신강해짐
+                strong_sum *= 1.3 # 점수 30% 증가
+                strong_sum += 10.0
 
         # 최종 점수 계산
         final_score = (strong_sum / total_presence) * 100

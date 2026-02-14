@@ -117,13 +117,11 @@ def format_result_to_md(test_case, ft_result, my_result):
     return "\n".join(lines)
 
 async def run_batch():
-    start_case = 28
-    end_case = 30
-    
-    print(f"Starting test cases {start_case} to {end_case}...")
+    target_cases = [24, 26, 28, 30]
+    print(f"Starting test cases: {target_cases}...")
     
     # Filter cases
-    cases = [tc for tc in TEST_CASES if start_case <= tc["no"] <= end_case]
+    cases = [tc for tc in TEST_CASES if tc["no"] in target_cases]
     
     tester = ForceTellerTester()
     
@@ -144,6 +142,13 @@ async def run_batch():
                 
                 # Run Local Engine (Optional for MD generation but good for completeness/DB)
                 my_result = tester.run_my_engine(tc)
+                
+                # Compare Results (for saving)
+                comparison = tester.compare_results(ft_result, my_result)
+                
+                # Save to DB (Missing part added!)
+                tester.save_to_db(ft_result, my_result, comparison)
+                print(f"Saved Test #{tc['no']} to DB")
                 
                 # Format Output
                 md_content = format_result_to_md(tc, ft_result, my_result)
