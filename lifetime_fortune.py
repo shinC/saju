@@ -14,7 +14,7 @@ import urllib.request
 from datetime import datetime
 from typing import Optional
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyCwys3qe3C5CiB8NT2SEquS8qZp6wl1YuQ")
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 

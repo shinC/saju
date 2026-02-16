@@ -746,6 +746,182 @@ class ForceTellerTester:
             "power": result.get("power", 0),
             "yongsin": main_yongsin
         }
+    
+    def run_my_engine(self, test_case: dict) -> dict:
+        """내 엔진으로 동일 케이스 4가지 조합 실행"""
+        birth_str = f"{test_case['date']} {test_case['time']}"
+        gender = "M" if test_case["gender"] == "M" else "F"
+        
+        base_args = {
+            "birth_str": birth_str,
+            "gender": gender,
+            "location": test_case["location"],
+            "use_yajas_i": True,
+            "calendar_type": "양력"
+        }
+        
+        results = {}
+        
+        # 1. 기본 (둘 다 False)
+        res_base = self.engine.analyze(**base_args, use_hap_correction=False, use_johoo_correction=False)
+        if "error" in res_base:
+            print(f"  [DEBUG] Engine Error: {res_base['error']}")
+        else:
+            print(f"  [DEBUG] Engine Result Keys: {list(res_base.keys())}")
+            if "scores" in res_base:
+                print(f"  [DEBUG] Scores: {res_base['scores']}")
+            
+        results["base"] = self._process_engine_result(res_base)
+        
+        # 2. 합만 (hap=True)
+        res_hap = self.engine.analyze(**base_args, use_hap_correction=True, use_johoo_correction=False)
+        results["hap"] = self._process_engine_result(res_hap)
+        
+        # 3. 조후만 (johoo=True)
+        res_johoo = self.engine.analyze(**base_args, use_hap_correction=False, use_johoo_correction=True)
+        results["johoo"] = self._process_engine_result(res_johoo)
+        
+        # 4. 둘 다 (adj=True, True)
+        res_adj = self.engine.analyze(**base_args, use_hap_correction=True, use_johoo_correction=True)
+        results["adj"] = self._process_engine_result(res_adj)
+        
+        return results
+    
+    def compare_results(self, ft_result: dict, my_result: dict) -> dict:
+        """포스텔러 결과와 내 엔진 결과 비교 (기본 설정 기준)"""
+        comparison = {
+            "pillar_match": True,
+            "element_diff_max": 0.0,
+            "strength_match": False,
+            "differences": []
+        }
+        
+        # 기본(base) 결과끼리 비교
+        ft_base = ft_result.get("forceteller", {})
+        my_base = my_result.get("base", {})
+        
+        # 오행 비교
+        ft_elements = ft_base.get("elements", {})
+        my_elements = my_base.get("elements", {})
+        
+        elem_map = {"목": "목", "화": "화", "토": "토", "금": "금", "수": "수"}
+        for k, v in ft_elements.items():
+            my_val = my_elements.get(elem_map.get(k, k), 0)
+            diff = abs(v - my_val)
+            if diff > comparison["element_diff_max"]:
+                comparison["element_diff_max"] = diff
+            if diff > 1.0:
+                comparison["differences"].append(f"오행 {k}: FT={v}%, MY={my_val}%")
+        
+        # 신강/신약 비교
+        ft_strength = ft_base.get("strength", "")
+        my_strength = my_base.get("strength", "")
+        if ft_strength and my_strength:
+            comparison["strength_match"] = ft_strength in my_strength or my_strength in ft_strength
+        
+        return comparison
+    
+    def save_to_db(self, result: dict, my_result: dict, comparison: dict):
+        """테스트 결과를 SQLite DB에 저장"""
+        conn = sqlite3.connect(self.DB_PATH)
+        cursor = conn.cursor()
+        
+        test_case = result.get("input", {})
+        ft_meta = result.get("forceteller", {})
+        ft_base = result.get("forceteller", {})
+        ft_hap = result.get("forceteller_hap", {})
+        ft_johoo = result.get("forceteller_johoo", {})
+        ft_adj = result.get("forceteller_adj", {})
+        ft_pillars = ft_meta.get("pillars", {})
+        
+        # 내 엔진 결과
+        my_base = my_result.get("base", {})
+        my_hap = my_result.get("hap", {})
+        my_johoo = my_result.get("johoo", {})
+        my_adj = my_result.get("adj", {})
+        my_pillars = my_base.get("pillars", ["", "", "", ""])
+        
+        def get_elem(d, key): return d.get("elements", {}).get(key, 0)
+        def get_tg(d, key): 
+            val = d.get("ten_gods", {}).get(key, 0)
+            if isinstance(val, dict): return val.get("count", 0)
+            return val
+        
+        cursor.execute("""
+            INSERT INTO test_results (
+                test_no, test_date, input_date, input_time, gender, location, test_purpose,
+                ft_year_pillar, ft_month_pillar, ft_day_pillar, ft_hour_pillar,
+                ft_correction_minutes, ft_summer_time_minutes, ft_zodiac,
+                
+                ft_wood, ft_fire, ft_earth, ft_metal, ft_water,
+                ft_wood_adj, ft_fire_adj, ft_earth_adj, ft_metal_adj, ft_water_adj,
+                
+                ft_bigyeon, ft_geobje, ft_siksin, ft_sanggwan, ft_pyeonjae,
+                ft_jeongjae, ft_pyeongwan, ft_jeonggwan, ft_pyeonin, ft_jeongin,
+                
+                ft_strength, ft_strength_adj,
+                ft_yongsin, ft_yongsin_adj,
+                ft_sinsal,
+                
+                my_year_pillar, my_month_pillar, my_day_pillar, my_hour_pillar,
+                
+                my_wood, my_fire, my_earth, my_metal, my_water,
+                
+                my_strength, my_yongsin,
+                
+                pillar_match, element_diff_max, strength_match
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                
+                ?, ?,
+                ?, ?,
+                ?,
+                
+                ?, ?, ?, ?,
+                
+                ?, ?, ?, ?, ?,
+                
+                ?, ?,
+                
+                ?, ?, ?
+            )
+        """, (
+            test_case.get("no"), datetime.now().strftime("%Y-%m-%d %H:%M"),
+            test_case.get("date"), test_case.get("time"), test_case.get("gender"),
+            test_case.get("location"), test_case.get("purpose"),
+            
+            ft_pillars.get("년주"), ft_pillars.get("월주"), ft_pillars.get("일주"), ft_pillars.get("시주"),
+            ft_meta.get("correction_minutes"), ft_meta.get("summer_time_minutes"), ft_meta.get("zodiac"),
+            
+            get_elem(ft_base, "목"), get_elem(ft_base, "화"), get_elem(ft_base, "토"), get_elem(ft_base, "금"), get_elem(ft_base, "수"),
+            get_elem(ft_adj, "목"), get_elem(ft_adj, "화"), get_elem(ft_adj, "토"), get_elem(ft_adj, "금"), get_elem(ft_adj, "수"),
+            
+            get_tg(ft_base, "비견"), get_tg(ft_base, "겁재"), get_tg(ft_base, "식신"), get_tg(ft_base, "상관"), get_tg(ft_base, "편재"),
+            get_tg(ft_base, "정재"), get_tg(ft_base, "편관"), get_tg(ft_base, "정관"), get_tg(ft_base, "편인"), get_tg(ft_base, "정인"),
+            
+            ft_base.get("strength"), ft_adj.get("strength"),
+            ft_base.get("yongsin"), ft_adj.get("yongsin"),
+            ft_meta.get("sinsal"),
+            
+            # 내 엔진 데이터
+            my_pillars[0], my_pillars[1], my_pillars[2], my_pillars[3],
+            
+            get_elem(my_base, "목"), get_elem(my_base, "화"), get_elem(my_base, "토"), get_elem(my_base, "금"), get_elem(my_base, "수"),
+            
+            my_base.get("strength"), my_base.get("yongsin"),
+            
+            comparison["pillar_match"], comparison["element_diff_max"], comparison["strength_match"]
+        ))
+        
+        conn.commit()
+        conn.close()
 
     def write_to_markdown(self, result: dict, my_result: dict, comparison: dict):
         """결과를 마크다운 파일에 기록 (포스텔러 vs 내 엔진 비교)"""
