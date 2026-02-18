@@ -167,137 +167,162 @@ class SajuEngine:
 
 
     def _get_element_distribution(self, palja, use_hap_correction=False, use_johoo_correction=False):
+        """FT 방식: 기본 8글자만으로 오행 분포 계산 (지장간은 별도)"""
         weights, hap_map = self._get_analysis_config(palja, use_hap_correction, use_johoo_correction)
         dist_scores = {"목": 0.0, "화": 0.0, "토": 0.0, "금": 0.0, "수": 0.0}
         effective_elements = [sc.ELEMENT_MAP[char] for char in palja]
         
-        # [수정] 합 적용 비율 하향 조정 (포스텔러 데이터 분석 결과 반영)
-        # 기존 0.5(50%) -> 0.3(30%)
-        HAP_RATIO = 0.3
-
+        # 기본 8글자만으로 계산 (각 12.5%)
         for i in range(8):
-            orig_elem = sc.ELEMENT_MAP[palja[i]]
-            weight = weights[i]
+            char = palja[i]
+            orig_elem = sc.ELEMENT_MAP[char]
+            base_weight = 12.5
             
-            if i in hap_map:
+            # 합 적용 시에도 기본 가중치 유지
+            if use_hap_correction and i in hap_map:
                 new_elem = hap_map[i]
-                dist_scores[new_elem] += weight * HAP_RATIO
-                dist_scores[orig_elem] += weight * (1 - HAP_RATIO)
+                # 합 변화 미미 (FT는 합에서 거의 변화 없음)
+                dist_scores[new_elem] += base_weight * 0.02
+                dist_scores[orig_elem] += base_weight * 0.98
                 effective_elements[i] = new_elem
             else:
-                dist_scores[orig_elem] += weight
+                dist_scores[orig_elem] += base_weight
         
-        # [추가] 조후 보정 시 특정 오행 가산점 부여 (포스텔러 패턴 반영)
-        if use_johoo_correction:
-            month_b = palja[3] # 월지
-            bonus_elem = None
-            
-            if month_b in sc.WINTER_BS: bonus_elem = "화" # 겨울 -> 화 부족
-            elif month_b in sc.SUMMER_BS: bonus_elem = "수" # 여름 -> 수 부족
-            elif month_b in sc.SPRING_BS: bonus_elem = "금" # 봄 -> 금(관성) 필요? (상황에 따름)
-            elif month_b in sc.AUTUMN_BS: bonus_elem = "목" # 가을 -> 목(재성) 필요?
-            
-            # 포스텔러는 특히 수/화 조후를 강하게 봄
-            if bonus_elem in ["수", "화"]:
-                dist_scores[bonus_elem] += 15.0 # 15% 포인트 가산 (상향 조정)
-            elif bonus_elem:
-                dist_scores[bonus_elem] += 10.0 # 그 외 오행은 10% 가산
-                
-        total = sum(dist_scores.values())
-        for k in dist_scores:
-            dist_scores[k] = round((dist_scores[k] / total * 100), 1) if total > 0 else 0.0
-            
-        return dist_scores, effective_elements
-
-    def _calculate_strength_score(self, palja, effective_elements, me_hj, use_hap_correction=False, use_johoo_correction=False):
-        """
-        [최종 통합판] 변환된 오행 리스트를 바탕으로 신강약 지수 계산
-        """
-        # 1. 위치별 가중치 재설정 (일간 index 4는 제외)
-        # weights 인덱스는 palja/effective_elements의 인덱스와 동일
-        weights = {0: 10.0, 1: 10.0, 2: 10.0, 3: 30.0, 5: 15.0, 6: 10.0, 7: 15.0}
-        
+        # 조후 보정 (기본 분포에서 조정)
         if use_johoo_correction:
             month_b = palja[3]
-            if month_b in sc.WINTER_BS or month_b in sc.SUMMER_BS:
-                weights[3] += 5.0
-            weights[0] *= 0.9
-            weights[1] *= 0.9
+            bonus_elem = None
+            bonus_amount = 15.0
 
-        # 2. 내 편(Strong Energy) 점수 계산
-        strong_sum = 10.0  # 일간 본인 기본 점수
-        total_presence = 10.0 + sum(weights.values())
+            if month_b in sc.WINTER_BS:
+                bonus_elem = "수"
+            elif month_b in sc.SUMMER_BS:
+                bonus_elem = "화"
+            elif month_b in sc.SPRING_BS:
+                bonus_elem = "목"
+            elif month_b in sc.AUTUMN_BS:
+                bonus_elem = "금"
 
-        me_elem = sc.ELEMENT_MAP[palja[4]] # 내 오행 (예: '토')
+            if bonus_elem:
+                dist_scores[bonus_elem] += bonus_amount
 
-        for idx, weight in weights.items():
-            target_elem = effective_elements[idx] # [중요] 합/보정이 완료된 오행 사용
-            
-            # 내 일간 오행(me_elem)과 대상 오행(target_elem)의 관계 확인
+            if dist_scores["토"] > 0:
+                dist_scores["토"] -= 8.0
+                
+        # 정규화 (총합 100%)
+        total = sum(dist_scores.values())
+        if total > 0:
+            for k in dist_scores:
+                dist_scores[k] = round((dist_scores[k] / total * 100), 1)
+        
+        return dist_scores, effective_elements
+
+    def _calculate_strength_score(self, palja, effective_elements, me_hj, scores, use_hap_correction=False, use_johoo_correction=False):
+        """
+        [최종 통합판] 오행 분포(scores)를 기반으로 신강약 지수 계산
+        """
+        # 오행 분포(scores)를 기반으로 직접 계산
+        me_elem = sc.ELEMENT_MAP[palja[4]]  # 내 오행
+        
+        # 1. 내 편(Strong Energy) 점수 계산 (오행 분포 기반)
+        # 비겁(비견/겁재)과 인성(편인/정인)은 나를 돕는 기운
+        strong_elements = []
+        for elem_name, elem_val in scores.items():
+            relation = self._get_element_relation(me_elem, elem_name)
+            if relation in ['비겁', '인성']:
+                strong_elements.append(elem_val)
+        
+        # 내 편 오행 비율 합계 (일간 기본 10% 포함)
+        strong_ratio = sum(strong_elements)
+        
+        # 2. 통근 본너스 (지지에 뿌리가 있는지 확인) - 1단계 튜닝: 5%->2%
+        root_bonus = 0.0
+        for idx in [1, 3, 5, 7]:  # 지지 인덱스
+            char = palja[idx]
+            target_elem = effective_elements[idx]
             relation = self._get_element_relation(me_elem, target_elem)
             
-            # 비겁(비견/겁재)이거나 인성(편인/정인)이면 내 편
             if relation in ['비겁', '인성']:
-                strong_sum += weight
-                
-                # 통근 보너스 (지지에 뿌리가 있는지 확인)
-                char = palja[idx]
-                if idx in [1, 3, 5, 7] and palja[4] in sc.JIJANGAN_MAP.get(char, ""):
-                    bonus = weight * 0.3
-                    strong_sum += bonus
-                    total_presence += bonus
-
-        # 3. 머릿수 보정 (effective_elements 기준)
-        strong_count = sum(1 for i, elem in enumerate(effective_elements) 
-                        if i != 4 and self._get_element_relation(me_elem, elem) in ['비겁', '인성'])
+                # 뿌리가 있으면 본너스
+                if palja[4] in sc.JIJANGAN_MAP.get(char, ""):
+                    root_bonus += 2.0  # 5.0->2.0: 과도한 본너스 감소
         
-        if strong_count >= 5: strong_sum += 5.0
-        elif strong_count <= 1: strong_sum -= 5.0
-
-        # [추가] 종격(쏠림) 보정 로직
-        # 특정 기운이 태왕할 경우, 일반적인 억부 점수를 왜곡시킴
-        # 식상/재성/관성이 태왕하면 일간은 극도로 약해짐 -> 점수 대폭 하향
-        # 인성/비겁이 태왕하면 일간은 극도로 강해짐 -> 점수 대폭 상향
+        # 3. 머릿수 보정 - 1단계 튜닝: ±10->±5, 기준 5->6
+        strong_count = sum(1 for i, elem in enumerate(effective_elements)
+                          if i != 4 and self._get_element_relation(me_elem, elem) in ['비겁', '인성'])
         
-        # effective_elements 기준 오행 카운트 (일간 제외)
-        elem_counts = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
-        for i, elem in enumerate(effective_elements):
-            if i != 4: elem_counts[elem] += weights[i] # 가중치 반영된 합
-            
-        total_weight_sum = sum(weights.values()) # 일간 제외 총 가중치 합
+        count_bonus = 0.0
+        if strong_count >= 6:  # 5->6: 기준 완화
+            count_bonus = 5.0   # 10.0->5.0: 과도한 보정 감소
+        elif strong_count <= 1:
+            count_bonus = -5.0  # -10.0->-5.0: 과도한 보정 감소
         
-        # 가장 강한 오행 찾기
-        max_elem = max(elem_counts, key=elem_counts.get)
-        max_score = elem_counts[max_elem]
-        max_ratio = max_score / total_weight_sum
+        # 4. 종격(쏠림) 보정 (오행 분포 기준)
+        max_elem = max(scores, key=scores.get)
+        max_ratio = scores[max_elem] / 100.0
         
         relation = self._get_element_relation(me_elem, max_elem)
         
-        # 쏠림 기준: 50% 이상이면 태왕으로 간주
-        if max_ratio >= 0.5:
+        skew_factor = 1.0
+        if max_ratio >= 0.45:
             if relation in ['식상', '재성', '관성']:
-                # 내 힘을 빼는 기운이 태왕 -> 극도로 신약해짐
-                strong_sum *= 0.5 # 점수 반토막 (극약 유도)
-                strong_sum -= 10.0
+                skew_factor = 0.80
             elif relation in ['인성', '비겁']:
-                # 나를 돕는 기운이 태왕 -> 극도로 신강해짐
-                strong_sum *= 1.3 # 점수 30% 증가
-                strong_sum += 10.0
+                skew_factor = 1.20
+        
+        # 5. 최종 점수 계산
+        base_score = 15.0 + strong_ratio + root_bonus + count_bonus
+        final_score = base_score * skew_factor
 
-        # 최종 점수 계산
-        final_score = (strong_sum / total_presence) * 100
+        final_score = final_score * 0.85 - 5.0
+        
+        # 4단계 튜닝: 218개 데이터 기반 구간별 보정
+        final_score = self._apply_score_correction(final_score, use_hap_correction, use_johoo_correction)
+        
         return max(5, min(100, int(final_score)))
 
+    def _apply_score_correction(self, score, use_hap_correction=False, use_johoo_correction=False):
+        temp_cat = self._get_strength_category(score)
+        
+        base_corrections = {
+            '극약': 3.5,
+            '태약': 3.7,
+            '신약': 0.5,
+            '중화신약': -3.1,
+            '중화신강': -2.1,
+            '신강': -8.9,
+            '태강': -15.2,
+            '극왕': -21.0
+        }
+        
+        if use_hap_correction and not use_johoo_correction:
+            return score + base_corrections.get(temp_cat, 0) - 3.0
+        elif use_johoo_correction and not use_hap_correction:
+            return score + base_corrections.get(temp_cat, 0) - 4.0
+        elif use_hap_correction and use_johoo_correction:
+            return score + base_corrections.get(temp_cat, 0) - 4.0
+        else:
+            return score + base_corrections.get(temp_cat, 0)
+    
+    def _get_strength_category(self, score):
+        if score <= 15: return '극약'
+        elif score <= 28: return '태약'
+        elif score <= 38: return '신약'
+        elif score <= 52: return '중화신약'
+        elif score <= 68: return '중화신강'
+        elif score <= 78: return '신강'
+        elif score <= 90: return '태강'
+        else: return '극왕'
+
     def _get_detailed_status(self, power):
-        """신강약 8단계 세분화 (가중치 지수 기반)"""
-        if power <= 15: return "극약(極弱) - 실령, 실지, 실세 상태"
-        elif power <= 30: return "태약(太弱)"
-        elif power <= 43: return "신약(身弱)"
-        elif power <= 49: return "중화신약(中和身弱)"
-        elif power <= 56: return "중화신강(中和身强)"
-        elif power <= 70: return "신강(身强)"
-        elif power <= 85: return "태강(太强)"
-        else: return "극왕(極旺) - 득령, 득지, 득세 상태"
+        if power <= 15: return "극약(極弱)"
+        elif power <= 28: return "태약(太弱)"
+        elif power <= 38: return "신약(身弱)"
+        elif power <= 52: return "중화신약(中和身弱)"
+        elif power <= 68: return "중화신강(中和身强)"
+        elif power <= 78: return "신강(身强)"
+        elif power <= 90: return "태강(太强)"
+        else: return "극왕(極旺)"
 
 
     def _get_yongsin_info(self, palja, power, me_hj_hanja):
@@ -862,19 +887,12 @@ class SajuEngine:
         return '비겁'
 
     def _get_analysis_config(self, palja, use_hap_correction, use_johoo_correction):
-        """가중치와 합 정보를 한 곳에서 관리"""
-        # 1. 가중치 설정
-        if use_johoo_correction:
-            weights = [10.0, 10.0, 10.0, 30.0, 10.0, 15.0, 10.0, 15.0]
-            month_b = palja[3]
-            if month_b in sc.WINTER_BS or month_b in sc.SUMMER_BS:
-                weights[3] += 5.0
-            weights[0] *= 0.9
-            weights[1] *= 0.9
-        else:
-            weights = [12.5] * 8
+        """가중치와 합 정보를 한 곳에서 관리 - 2단계 튜닝: FT 스타일 단순화"""
+        # 2단계 튜닝: FT는 기본적으로 모든 글자 균등 (12.5%)
+        # 조후 적용 시에도 가중치 변경 없이 오행 가산만 사용
+        weights = [12.5] * 8
 
-        # 2. 합(Hap) 맵 생성
+        # 2. 합(Hap) 맵 생성 - 2단계 튜닝: 더 엄격한 조건
         hap_map = {}
         if use_hap_correction:
             jiji_indices = [1, 3, 5, 7]
@@ -886,9 +904,17 @@ class SajuEngine:
                 matched_indices = [idx for idx, c in enumerate(jiji_chars) if c in rule_chars]
                 unique_matched = set([jiji_chars[i] for i in matched_indices])
                 
-                if len(unique_matched) >= 3 or (len(unique_matched) >= 2 and any(w in unique_matched for w in "子午卯酉")):
+                # 2단계 튜닝: 삼합은 3개 모두, 반합은 정확히 2개+완성자
+                if len(unique_matched) >= 3:
+                    # 완성된 삼합/방합
                     for slot in matched_indices:
                         hap_map[jiji_indices[slot]] = res_elem
+                elif len(unique_matched) == 2:
+                    # 반합: 완성 글자(국)가 필수
+                    completion_chars = ['卯', '午', '酉', '子']  # 목/화/금/수 국
+                    if any(c in unique_matched for c in completion_chars):
+                        for slot in matched_indices:
+                            hap_map[jiji_indices[slot]] = res_elem
                         
         return weights, hap_map   
     # ==========================================================================
@@ -954,10 +980,9 @@ class SajuEngine:
         palja = [yG[0], yG[1], mG[0], mG[1], target_dG[0], target_dG[1], hG_gan, sc.BRANCHES[h_idx]]
                 
         # 7. 오행/신강약 분석
-        me_hj = sc.E_MAP_HJ.get(palja[4]) 
-         # 오행 분포(단순 개수)와 신강약 지수(가중치)를 각각 구함
+        me_hj = sc.E_MAP_HJ.get(palja[4])
         scores, effective_elements = self._get_element_distribution(palja, use_hap_correction, use_johoo_correction)
-        power = self._calculate_strength_score(palja, effective_elements, me_hj, use_hap_correction, use_johoo_correction)
+        power = self._calculate_strength_score(palja, effective_elements, me_hj, scores, use_hap_correction, use_johoo_correction)
         yongsin, pillars = self._get_yongsin_info(palja, power, me_hj), self._investigate_sinsal(palja, palja[4], me_hj)
         for i, p in enumerate(pillars):
             # effective_elements는 8글자 순서: [년간, 년지, 월간, 월지, 일간, 일지, 시간, 시지]

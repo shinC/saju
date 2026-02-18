@@ -788,37 +788,61 @@ class ForceTellerTester:
         return results
     
     def compare_results(self, ft_result: dict, my_result: dict) -> dict:
-        """포스텔러 결과와 내 엔진 결과 비교 (기본 설정 기준)"""
+        """포스텔러 결과와 내 엔진 결과 비교 (4가지 설정 모두 비교)"""
         comparison = {
             "pillar_match": True,
             "element_diff_max": 0.0,
             "strength_match": False,
             "differences": []
         }
-        
-        # 기본(base) 결과끼리 비교
-        ft_base = ft_result.get("forceteller", {})
-        my_base = my_result.get("base", {})
-        
-        # 오행 비교
-        ft_elements = ft_base.get("elements", {})
-        my_elements = my_base.get("elements", {})
-        
-        elem_map = {"목": "목", "화": "화", "토": "토", "금": "금", "수": "수"}
-        for k, v in ft_elements.items():
-            my_val = my_elements.get(elem_map.get(k, k), 0)
-            diff = abs(v - my_val)
-            if diff > comparison["element_diff_max"]:
-                comparison["element_diff_max"] = diff
-            if diff > 1.0:
-                comparison["differences"].append(f"오행 {k}: FT={v}%, MY={my_val}%")
-        
-        # 신강/신약 비교
-        ft_strength = ft_base.get("strength", "")
-        my_strength = my_base.get("strength", "")
-        if ft_strength and my_strength:
-            comparison["strength_match"] = ft_strength in my_strength or my_strength in ft_strength
-        
+
+        def compare_case(ft_data, my_data, case_name):
+            """개별 케이스 비교 헬퍼 함수"""
+            ft_elements = ft_data.get("elements", {})
+            my_elements = my_data.get("elements", {})
+
+            elem_map = {"목": "목", "화": "화", "토": "토", "금": "금", "수": "수"}
+            case_diffs = []
+            max_diff = 0.0
+
+            for k, v in ft_elements.items():
+                my_val = my_elements.get(elem_map.get(k, k), 0)
+                diff = abs(v - my_val)
+                if diff > max_diff:
+                    max_diff = diff
+                if diff > 1.0:
+                    case_diffs.append(f"[{case_name}] 오행 {k}: FT={v}%, MY={my_val}%")
+
+            # 신강/신약 비교
+            ft_strength = ft_data.get("strength", "")
+            my_strength = my_data.get("strength", "")
+            strength_match = False
+            if ft_strength and my_strength:
+                strength_match = ft_strength in my_strength or my_strength in ft_strength
+
+            return max_diff, case_diffs, strength_match
+
+        # 4가지 설정 모두 비교
+        cases = [
+            ("기본", ft_result.get("forceteller", {}), my_result.get("base", {})),
+            ("합", ft_result.get("forceteller_hap", {}), my_result.get("hap", {})),
+            ("조후", ft_result.get("forceteller_johoo", {}), my_result.get("johoo", {})),
+            ("둘다", ft_result.get("forceteller_adj", {}), my_result.get("adj", {}))
+        ]
+
+        all_strength_match = True
+        for case_name, ft_data, my_data in cases:
+            if not ft_data or not my_data:
+                continue
+            max_diff, diffs, strength_match = compare_case(ft_data, my_data, case_name)
+            if max_diff > comparison["element_diff_max"]:
+                comparison["element_diff_max"] = max_diff
+            comparison["differences"].extend(diffs)
+            if not strength_match:
+                all_strength_match = False
+
+        comparison["strength_match"] = all_strength_match
+
         return comparison
     
     def save_to_db(self, result: dict, my_result: dict, comparison: dict):
@@ -1062,13 +1086,35 @@ class ForceTellerTester:
                 # 마크다운 리포트 작성
                 self.write_to_markdown(ft_result, my_result, comparison)
                 
-                # 결과 출력
-                print(f"  [FT] 오행: {ft_result.get('forceteller', {}).get('elements', {})}")
-                print(f"  [MY] 오행: {my_result.get('base', {}).get('elements', {})}")
+                # 결과 출력 (4가지 설정 모두)
+                print(f"\n  [===== 비교 결과 =====]")
+                cases = [
+                    ("기본", ft_result.get('forceteller', {}), my_result.get('base', {})),
+                    ("합", ft_result.get('forceteller_hap', {}), my_result.get('hap', {})),
+                    ("조후", ft_result.get('forceteller_johoo', {}), my_result.get('johoo', {})),
+                    ("둘다", ft_result.get('forceteller_adj', {}), my_result.get('adj', {}))
+                ]
+
+                for case_name, ft_data, my_data in cases:
+                    if not ft_data or not my_data:
+                        continue
+                    ft_elem = ft_data.get('elements', {})
+                    my_elem = my_data.get('elements', {})
+                    ft_strength = ft_data.get('strength', '')
+                    my_strength = my_data.get('strength', '')
+                    match = 'O' if (ft_strength in my_strength or my_strength in ft_strength) else 'X'
+
+                    print(f"\n  [{case_name}]")
+                    print(f"    FT: {ft_elem}")
+                    print(f"    MY: {my_elem}")
+                    print(f"    신강/신약: FT={ft_strength}, MY={my_strength}, 일치={match}")
+
+                print(f"\n  [===== 종합 =====]")
                 print(f"  [비교] 최대 오행 차이: {comparison['element_diff_max']:.1f}%")
                 print(f"  [비교] 신강/신약 일치: {'O' if comparison['strength_match'] else 'X'}")
-                
+
                 if comparison["differences"]:
+                    print(f"  [차이 상세]")
                     for diff in comparison["differences"]:
                         print(f"    - {diff}")
                 
@@ -1080,7 +1126,7 @@ class ForceTellerTester:
 
 
 # 테스트 케이스 데이터
-TEST_CASES = [
+TEST_CASES1 = [
     {"no": 1, "date": "1990-02-04", "time": "11:14", "gender": "M", "location": "서울", "purpose": "입춘 절입 (연주 변경 경계)"},
     {"no": 2, "date": "1988-05-15", "time": "10:30", "gender": "F", "location": "서울", "purpose": "80년대 썸머타임 적용"},
     {"no": 3, "date": "2026-01-25", "time": "23:40", "gender": "M", "location": "서울", "purpose": "야자시 (일주 유지, 시주 다음날)"},
@@ -1112,15 +1158,281 @@ TEST_CASES = [
     {"no": 29, "date": "2024-05-05", "time": "11:10", "gender": "M", "location": "울릉도", "purpose": "최동단 경도 (일본시와 최소 시차)"},
     {"no": 30, "date": "2024-10-10", "time": "15:30", "gender": "F", "location": "전주", "purpose": "전북 지역 신시(申時) 보정 검증"},
 ]
+TEST_CASES2 = [
+    {"no": 1, "date": "1948-06-01", "time": "01:30", "gender": "M", "location": "서울", "purpose": ""},
+    {"no": 2, "date": "1949-04-03", "time": "00:00", "gender": "F", "location": "부산", "purpose": ""},
+    {"no": 3, "date": "1951-05-06", "time": "12:00", "gender": "M", "location": "대구", "purpose": ""},
+    {"no": 4, "date": "1954-03-21", "time": "23:55", "gender": "F", "location": "인천", "purpose": ""},
+    {"no": 5, "date": "1955-07-07", "time": "10:15", "gender": "M", "location": "광주", "purpose": ""},
+    {"no": 6, "date": "1960-02-05", "time": "00:20", "gender": "F", "location": "대전", "purpose": ""},
+    {"no": 7, "date": "1961-08-09", "time": "23:45", "gender": "M", "location": "울산", "purpose": ""},
+    {"no": 8, "date": "1987-04-11", "time": "23:30", "gender": "F", "location": "수원", "purpose": ""},
+    {"no": 9, "date": "1987-10-11", "time": "00:15", "gender": "M", "location": "창원", "purpose": ""},
+    {"no": 10, "date": "1988-05-08", "time": "02:00", "gender": "F", "location": "청주", "purpose": ""},
+    {"no": 11, "date": "1988-10-09", "time": "00:45", "gender": "M", "location": "전주", "purpose": ""},
+    {"no": 12, "date": "2023-03-06", "time": "05:36", "gender": "F", "location": "천안", "purpose": ""},
+    {"no": 13, "date": "2023-06-06", "time": "07:18", "gender": "M", "location": "김해", "purpose": ""},
+    {"no": 14, "date": "2024-04-04", "time": "16:02", "gender": "F", "location": "포항", "purpose": ""},
+    {"no": 15, "date": "2024-05-05", "time": "09:10", "gender": "M", "location": "제주", "purpose": ""},
+    {"no": 16, "date": "2024-07-07", "time": "00:00", "gender": "F", "location": "진주", "purpose": ""},
+    {"no": 17, "date": "2024-11-07", "time": "07:20", "gender": "M", "location": "의정부", "purpose": ""},
+    {"no": 18, "date": "2025-03-05", "time": "17:07", "gender": "F", "location": "파주", "purpose": ""},
+    {"no": 19, "date": "2025-05-05", "time": "15:00", "gender": "M", "location": "시흥", "purpose": ""},
+    {"no": 20, "date": "2025-09-07", "time": "13:51", "gender": "F", "location": "양주", "purpose": ""},
+    {"no": 21, "date": "2026-02-04", "time": "11:33", "gender": "M", "location": "구리", "purpose": ""},
+    {"no": 22, "date": "2026-04-05", "time": "05:48", "gender": "F", "location": "안성", "purpose": ""},
+    {"no": 23, "date": "2026-06-06", "time": "01:59", "gender": "M", "location": "군포", "purpose": ""},
+    {"no": 24, "date": "1950-12-31", "time": "23:59", "gender": "F", "location": "이천", "purpose": ""},
+    {"no": 25, "date": "1970-01-01", "time": "12:00", "gender": "M", "location": "하남", "purpose": ""},
+    {"no": 26, "date": "1980-12-22", "time": "01:00", "gender": "F", "location": "오산", "purpose": ""},
+    {"no": 27, "date": "1995-08-15", "time": "18:00", "gender": "M", "location": "서산", "purpose": ""},
+    {"no": 28, "date": "2010-10-10", "time": "10:10", "gender": "F", "location": "충주", "purpose": ""},
+    {"no": 29, "date": "2020-02-29", "time": "23:40", "gender": "M", "location": "제천", "purpose": ""},
+    {"no": 30, "date": "2025-12-31", "time": "23:58", "gender": "F", "location": "논산", "purpose": ""},
+]
 
+TEST_CASES3 = [
+    {"no": 1, "date": "1948-08-15", "time": "15:30", "gender": "M", "location": "서울", "purpose": ""},
+    {"no": 2, "date": "1952-05-05", "time": "12:00", "gender": "F", "location": "부산", "purpose": ""},
+    {"no": 3, "date": "1954-10-10", "time": "23:45", "gender": "M", "location": "인천", "purpose": ""},
+    {"no": 4, "date": "1956-02-05", "time": "00:10", "gender": "F", "location": "대구", "purpose": ""},
+    {"no": 5, "date": "1961-05-16", "time": "04:30", "gender": "M", "location": "광주", "purpose": ""},
+    {"no": 6, "date": "1987-05-31", "time": "23:15", "gender": "F", "location": "대전", "purpose": ""},
+    {"no": 7, "date": "1988-06-15", "time": "11:00", "gender": "M", "location": "울산", "purpose": ""},
+    {"no": 8, "date": "1988-08-14", "time": "13:20", "gender": "F", "location": "수원", "purpose": ""},
+    {"no": 9, "date": "1991-02-04", "time": "17:00", "gender": "M", "location": "안산", "purpose": ""},
+    {"no": 10, "date": "2000-05-05", "time": "05:55", "gender": "F", "location": "창원", "purpose": ""},
+    {"no": 11, "date": "2012-02-29", "time": "18:30", "gender": "M", "location": "고양", "purpose": ""},
+    {"no": 12, "date": "2023-03-22", "time": "01:20", "gender": "F", "location": "용인", "purpose": ""},
+    {"no": 13, "date": "2023-04-20", "time": "23:50", "gender": "M", "location": "성남", "purpose": ""},
+    {"no": 14, "date": "2024-02-04", "time": "17:28", "gender": "F", "location": "부천", "purpose": ""},
+    {"no": 15, "date": "2024-06-21", "time": "05:50", "gender": "M", "location": "남양주", "purpose": ""},
+    {"no": 16, "date": "2024-08-07", "time": "09:15", "gender": "F", "location": "화성", "purpose": ""},
+    {"no": 17, "date": "2024-12-31", "time": "23:35", "gender": "M", "location": "청주", "purpose": ""},
+    {"no": 18, "date": "2025-01-05", "time": "11:54", "gender": "F", "location": "전주", "purpose": ""},
+    {"no": 19, "date": "2025-02-03", "time": "22:50", "gender": "M", "location": "천안", "purpose": ""},
+    {"no": 20, "date": "2025-03-20", "time": "18:01", "gender": "F", "location": "김해", "purpose": ""},
+    {"no": 21, "date": "2025-07-25", "time": "12:00", "gender": "M", "location": "포항", "purpose": ""},
+    {"no": 22, "date": "2025-11-07", "time": "07:46", "gender": "F", "location": "제주", "purpose": ""},
+    {"no": 23, "date": "2026-01-01", "time": "00:05", "gender": "M", "location": "진주", "purpose": ""},
+    {"no": 24, "date": "2026-02-04", "time": "11:32", "gender": "F", "location": "원주", "purpose": ""},
+    {"no": 25, "date": "2026-03-05", "time": "22:50", "gender": "M", "location": "춘천", "purpose": ""},
+    {"no": 26, "date": "2026-05-05", "time": "09:31", "gender": "F", "location": "군산", "purpose": ""},
+    {"no": 27, "date": "2026-07-07", "time": "18:40", "gender": "M", "location": "목포", "purpose": ""},
+    {"no": 28, "date": "2026-08-07", "time": "15:50", "gender": "F", "location": "경주", "purpose": ""},
+    {"no": 29, "date": "2026-10-08", "time": "04:20", "gender": "M", "location": "익산", "purpose": ""},
+    {"no": 30, "date": "2026-12-22", "time": "06:49", "gender": "F", "location": "여수", "purpose": ""},
+]
 
+TEST_CASES = [
+    {"no": 1, "date": "1948-07-15", "time": "12:30", "gender": "M", "location": "서울", "purpose": ""},
+    {"no": 2, "date": "1949-05-20", "time": "08:45", "gender": "F", "location": "부산", "purpose": ""},
+    {"no": 3, "date": "1950-09-01", "time": "14:20", "gender": "M", "location": "대구", "purpose": ""},
+    {"no": 4, "date": "1951-11-11", "time": "23:50", "gender": "F", "location": "인천", "purpose": ""},
+    {"no": 5, "date": "1952-03-03", "time": "01:15", "gender": "M", "location": "광주", "purpose": ""},
+    {"no": 6, "date": "1953-06-25", "time": "10:00", "gender": "F", "location": "대전", "purpose": ""},
+    {"no": 7, "date": "1954-01-01", "time": "00:05", "gender": "M", "location": "울산", "purpose": ""},
+    {"no": 8, "date": "1955-08-15", "time": "15:40", "gender": "F", "location": "수원", "purpose": ""},
+    {"no": 9, "date": "1956-12-25", "time": "19:00", "gender": "M", "location": "창원", "purpose": ""},
+    {"no": 10, "date": "1957-04-19", "time": "11:11", "gender": "F", "location": "성남", "purpose": ""},
+    {"no": 11, "date": "1958-05-10", "time": "22:30", "gender": "M", "location": "청주", "purpose": ""},
+    {"no": 12, "date": "1959-10-31", "time": "09:20", "gender": "F", "location": "전주", "purpose": ""},
+    {"no": 13, "date": "1960-07-17", "time": "13:50", "gender": "M", "location": "천안", "purpose": ""},
+    {"no": 14, "date": "1961-02-14", "time": "20:10", "gender": "F", "location": "안산", "purpose": ""},
+    {"no": 15, "date": "1962-03-21", "time": "04:45", "gender": "M", "location": "김해", "purpose": ""},
+    {"no": 16, "date": "1963-09-09", "time": "07:30", "gender": "F", "location": "포항", "purpose": ""},
+    {"no": 17, "date": "1964-05-05", "time": "16:25", "gender": "M", "location": "제주", "purpose": ""},
+    {"no": 18, "date": "1965-11-30", "time": "12:00", "gender": "F", "location": "진주", "purpose": ""},
+    {"no": 19, "date": "1966-12-31", "time": "23:58", "gender": "M", "location": "의정부", "purpose": ""},
+    {"no": 20, "date": "1967-01-01", "time": "00:02", "gender": "F", "location": "파주", "purpose": ""},
+    {"no": 21, "date": "1968-02-29", "time": "15:15", "gender": "M", "location": "양주", "purpose": ""},
+    {"no": 22, "date": "1969-08-08", "time": "08:40", "gender": "F", "location": "구리", "purpose": ""},
+    {"no": 23, "date": "1970-06-06", "time": "10:10", "gender": "M", "location": "안성", "purpose": ""},
+    {"no": 24, "date": "1971-04-05", "time": "21:20", "gender": "F", "location": "군포", "purpose": ""},
+    {"no": 25, "date": "1972-12-22", "time": "06:00", "gender": "M", "location": "이천", "purpose": ""},
+    {"no": 26, "date": "1973-10-25", "time": "18:30", "gender": "F", "location": "하남", "purpose": ""},
+    {"no": 27, "date": "1974-05-15", "time": "03:10", "gender": "M", "location": "오산", "purpose": ""},
+    {"no": 28, "date": "1975-02-04", "time": "19:50", "gender": "F", "location": "서산", "purpose": ""},
+    {"no": 29, "date": "1976-09-20", "time": "22:05", "gender": "M", "location": "충주", "purpose": ""},
+    {"no": 30, "date": "1977-07-07", "time": "11:40", "gender": "F", "location": "제천", "purpose": ""},
+    {"no": 31, "date": "1978-01-15", "time": "02:15", "gender": "M", "location": "논산", "purpose": ""},
+    {"no": 32, "date": "1979-03-10", "time": "05:55", "gender": "F", "location": "서울", "purpose": ""},
+    {"no": 33, "date": "1980-05-20", "time": "14:30", "gender": "M", "location": "부산", "purpose": ""},
+    {"no": 34, "date": "1981-08-15", "time": "17:10", "gender": "F", "location": "대구", "purpose": ""},
+    {"no": 35, "date": "1982-11-25", "time": "23:25", "gender": "M", "location": "인천", "purpose": ""},
+    {"no": 36, "date": "1983-02-04", "time": "23:59", "gender": "F", "location": "광주", "purpose": ""},
+    {"no": 37, "date": "1984-02-05", "time": "00:10", "gender": "M", "location": "대전", "purpose": ""},
+    {"no": 38, "date": "1985-06-10", "time": "08:00", "gender": "F", "location": "울산", "purpose": ""},
+    {"no": 39, "date": "1986-12-31", "time": "23:45", "gender": "M", "location": "수원", "purpose": ""},
+    {"no": 40, "date": "1987-05-15", "time": "10:30", "gender": "F", "location": "창원", "purpose": ""},
+    {"no": 41, "date": "1987-10-10", "time": "23:15", "gender": "M", "location": "성남", "purpose": ""},
+    {"no": 42, "date": "1988-05-10", "time": "12:00", "gender": "F", "location": "청주", "purpose": ""},
+    {"no": 43, "date": "1988-10-08", "time": "23:50", "gender": "M", "location": "전주", "purpose": ""},
+    {"no": 44, "date": "1989-01-05", "time": "21:30", "gender": "F", "location": "천안", "purpose": ""},
+    {"no": 45, "date": "1990-03-21", "time": "09:40", "gender": "M", "location": "안산", "purpose": ""},
+    {"no": 46, "date": "1991-07-07", "time": "15:15", "gender": "F", "location": "김해", "purpose": ""},
+    {"no": 47, "date": "1992-02-29", "time": "11:11", "gender": "M", "location": "포항", "purpose": ""},
+    {"no": 48, "date": "1993-08-08", "time": "19:20", "gender": "F", "location": "제주", "purpose": ""},
+    {"no": 49, "date": "1994-12-22", "time": "05:30", "gender": "M", "location": "진주", "purpose": ""},
+    {"no": 50, "date": "1995-10-10", "time": "13:00", "gender": "F", "location": "의정부", "purpose": ""},
+    {"no": 51, "date": "1996-02-04", "time": "21:10", "gender": "M", "location": "파주", "purpose": ""},
+    {"no": 52, "date": "1997-06-21", "time": "10:50", "gender": "F", "location": "양주", "purpose": ""},
+    {"no": 53, "date": "1998-04-05", "time": "02:35", "gender": "M", "location": "구리", "purpose": ""},
+    {"no": 54, "date": "1999-01-01", "time": "00:01", "gender": "F", "location": "안성", "purpose": ""},
+    {"no": 55, "date": "2000-12-31", "time": "23:59", "gender": "M", "location": "군포", "purpose": ""},
+    {"no": 56, "date": "2001-08-15", "time": "14:15", "gender": "F", "location": "이천", "purpose": ""},
+    {"no": 57, "date": "2002-02-04", "time": "08:20", "gender": "M", "location": "하남", "purpose": ""},
+    {"no": 58, "date": "2003-05-05", "time": "17:40", "gender": "F", "location": "오산", "purpose": ""},
+    {"no": 59, "date": "2004-02-29", "time": "13:10", "gender": "M", "location": "서산", "purpose": ""},
+    {"no": 60, "date": "2005-10-25", "time": "06:25", "gender": "F", "location": "충주", "purpose": ""},
+    {"no": 61, "date": "2006-07-07", "time": "12:00", "gender": "M", "location": "제천", "purpose": ""},
+    {"no": 62, "date": "2007-03-21", "time": "19:30", "gender": "F", "location": "논산", "purpose": ""},
+    {"no": 63, "date": "2008-02-04", "time": "19:15", "gender": "M", "location": "서울", "purpose": ""},
+    {"no": 64, "date": "2009-12-22", "time": "02:47", "gender": "F", "location": "부산", "purpose": ""},
+    {"no": 65, "date": "2010-06-21", "time": "23:55", "gender": "M", "location": "대구", "purpose": ""},
+    {"no": 66, "date": "2011-04-05", "time": "01:05", "gender": "F", "location": "인천", "purpose": ""},
+    {"no": 67, "date": "2012-05-20", "time": "10:15", "gender": "M", "location": "광주", "purpose": ""},
+    {"no": 68, "date": "2013-08-08", "time": "16:40", "gender": "F", "location": "대전", "purpose": ""},
+    {"no": 69, "date": "2014-02-04", "time": "07:03", "gender": "M", "location": "울산", "purpose": ""},
+    {"no": 70, "date": "2015-10-10", "time": "04:20", "gender": "F", "location": "수원", "purpose": ""},
+    {"no": 71, "date": "2016-02-29", "time": "22:15", "gender": "M", "location": "창원", "purpose": ""},
+    {"no": 72, "date": "2017-12-31", "time": "23:30", "gender": "F", "location": "성남", "purpose": ""},
+    {"no": 73, "date": "2018-05-05", "time": "14:50", "gender": "M", "location": "청주", "purpose": ""},
+    {"no": 74, "date": "2019-01-01", "time": "00:01", "gender": "F", "location": "전주", "purpose": ""},
+    {"no": 75, "date": "2020-03-20", "time": "12:49", "gender": "M", "location": "천안", "purpose": ""},
+    {"no": 76, "date": "2021-02-03", "time": "23:58", "gender": "F", "location": "안산", "purpose": ""},
+    {"no": 77, "date": "2022-08-07", "time": "21:28", "gender": "M", "location": "김해", "purpose": ""},
+    {"no": 78, "date": "2023-01-05", "time": "11:05", "gender": "F", "location": "포항", "purpose": ""},
+    {"no": 79, "date": "2023-03-21", "time": "06:24", "gender": "M", "location": "제주", "purpose": ""},
+    {"no": 80, "date": "2023-05-06", "time": "03:18", "gender": "F", "location": "진주", "purpose": ""},
+    {"no": 81, "date": "2023-07-07", "time": "17:30", "gender": "M", "location": "의정부", "purpose": ""},
+    {"no": 82, "date": "2023-09-08", "time": "06:26", "gender": "F", "location": "파주", "purpose": ""},
+    {"no": 83, "date": "2023-11-08", "time": "01:35", "gender": "M", "location": "양주", "purpose": ""},
+    {"no": 84, "date": "2023-12-22", "time": "12:27", "gender": "F", "location": "구리", "purpose": ""},
+    {"no": 85, "date": "2024-01-20", "time": "10:07", "gender": "M", "location": "안성", "purpose": ""},
+    {"no": 86, "date": "2024-02-19", "time": "13:13", "gender": "F", "location": "군포", "purpose": ""},
+    {"no": 87, "date": "2024-03-20", "time": "12:06", "gender": "M", "location": "이천", "purpose": ""},
+    {"no": 88, "date": "2024-04-19", "time": "22:59", "gender": "F", "location": "하남", "purpose": ""},
+    {"no": 89, "date": "2024-05-20", "time": "21:59", "gender": "M", "location": "오산", "purpose": ""},
+    {"no": 90, "date": "2024-07-22", "time": "16:44", "gender": "F", "location": "서산", "purpose": ""},
+    {"no": 91, "date": "2024-09-07", "time": "12:11", "gender": "M", "location": "충주", "purpose": ""},
+    {"no": 92, "date": "2024-10-08", "time": "03:59", "gender": "F", "location": "제천", "purpose": ""},
+    {"no": 93, "date": "2024-11-22", "time": "04:56", "gender": "M", "location": "논산", "purpose": ""},
+    {"no": 94, "date": "2025-01-20", "time": "04:59", "gender": "F", "location": "서울", "purpose": ""},
+    {"no": 95, "date": "2025-02-18", "time": "19:06", "gender": "M", "location": "부산", "purpose": ""},
+    {"no": 96, "date": "2025-04-04", "time": "16:48", "gender": "F", "location": "대구", "purpose": ""},
+    {"no": 97, "date": "2025-05-21", "time": "05:01", "gender": "M", "location": "인천", "purpose": ""},
+    {"no": 98, "date": "2025-06-21", "time": "11:42", "gender": "F", "location": "광주", "purpose": ""},
+    {"no": 99, "date": "2025-08-07", "time": "23:39", "gender": "M", "location": "대전", "purpose": ""},
+    {"no": 100, "date": "2025-09-23", "time": "03:19", "gender": "F", "location": "울산", "purpose": ""},
+    {"no": 101, "date": "1948-04-03", "time": "10:00", "gender": "M", "location": "수원", "purpose": ""},
+    {"no": 102, "date": "1949-09-25", "time": "22:30", "gender": "F", "location": "창원", "purpose": ""},
+    {"no": 103, "date": "1950-06-01", "time": "05:15", "gender": "M", "location": "성남", "purpose": ""},
+    {"no": 104, "date": "1951-08-10", "time": "12:45", "gender": "F", "location": "청주", "purpose": ""},
+    {"no": 105, "date": "1952-01-20", "time": "18:20", "gender": "M", "location": "전주", "purpose": ""},
+    {"no": 106, "date": "1953-11-05", "time": "09:10", "gender": "F", "location": "천안", "purpose": ""},
+    {"no": 107, "date": "1954-07-04", "time": "21:55", "gender": "M", "location": "안산", "purpose": ""},
+    {"no": 108, "date": "1955-03-12", "time": "03:30", "gender": "F", "location": "김해", "purpose": ""},
+    {"no": 109, "date": "1956-10-15", "time": "14:10", "gender": "M", "location": "포항", "purpose": ""},
+    {"no": 110, "date": "1957-05-25", "time": "16:40", "gender": "F", "location": "제주", "purpose": ""},
+    {"no": 111, "date": "1958-08-20", "time": "01:25", "gender": "M", "location": "진주", "purpose": ""},
+    {"no": 112, "date": "1959-02-28", "time": "23:40", "gender": "F", "location": "의정부", "purpose": ""},
+    {"no": 113, "date": "1960-04-10", "time": "07:50", "gender": "M", "location": "파주", "purpose": ""},
+    {"no": 114, "date": "1961-09-30", "time": "11:15", "gender": "F", "location": "양주", "purpose": ""},
+    {"no": 115, "date": "1962-11-11", "time": "20:30", "gender": "M", "location": "구리", "purpose": ""},
+    {"no": 116, "date": "1963-01-05", "time": "15:20", "gender": "F", "location": "안성", "purpose": ""},
+    {"no": 117, "date": "1964-07-07", "time": "04:10", "gender": "M", "location": "군포", "purpose": ""},
+    {"no": 118, "date": "1965-05-05", "time": "22:55", "gender": "F", "location": "이천", "purpose": ""},
+    {"no": 119, "date": "1966-08-15", "time": "10:05", "gender": "M", "location": "하남", "purpose": ""},
+    {"no": 120, "date": "1967-03-20", "time": "13:35", "gender": "F", "location": "오산", "purpose": ""},
+    {"no": 121, "date": "1968-10-10", "time": "06:15", "gender": "M", "location": "서산", "purpose": ""},
+    {"no": 122, "date": "1969-12-25", "time": "19:45", "gender": "F", "location": "충주", "purpose": ""},
+    {"no": 123, "date": "1970-02-04", "time": "18:25", "gender": "M", "location": "제천", "purpose": ""},
+    {"no": 124, "date": "1971-06-21", "time": "23:10", "gender": "F", "location": "논산", "purpose": ""},
+    {"no": 125, "date": "1972-04-15", "time": "09:00", "gender": "M", "location": "서울", "purpose": ""},
+    {"no": 126, "date": "1973-08-08", "time": "14:20", "gender": "F", "location": "부산", "purpose": ""},
+    {"no": 127, "date": "1974-11-20", "time": "03:55", "gender": "M", "location": "대구", "purpose": ""},
+    {"no": 128, "date": "1975-12-31", "time": "23:50", "gender": "F", "location": "인천", "purpose": ""},
+    {"no": 129, "date": "1976-02-05", "time": "00:05", "gender": "M", "location": "광주", "purpose": ""},
+    {"no": 130, "date": "1977-10-10", "time": "17:15", "gender": "F", "location": "대전", "purpose": ""},
+    {"no": 131, "date": "1978-05-05", "time": "11:30", "gender": "M", "location": "울산", "purpose": ""},
+    {"no": 132, "date": "1979-09-09", "time": "08:45", "gender": "F", "location": "수원", "purpose": ""},
+    {"no": 133, "date": "1980-01-01", "time": "10:10", "gender": "M", "location": "창원", "purpose": ""},
+    {"no": 134, "date": "1981-03-21", "time": "15:25", "gender": "F", "location": "성남", "purpose": ""},
+    {"no": 135, "date": "1982-07-07", "time": "20:40", "gender": "M", "location": "청주", "purpose": ""},
+    {"no": 136, "date": "1983-11-11", "time": "02:55", "gender": "F", "location": "전주", "purpose": ""},
+    {"no": 137, "date": "1984-05-20", "time": "06:10", "gender": "M", "location": "천안", "purpose": ""},
+    {"no": 138, "date": "1985-09-30", "time": "12:20", "gender": "F", "location": "안산", "purpose": ""},
+    {"no": 139, "date": "1986-04-05", "time": "18:35", "gender": "M", "location": "김해", "purpose": ""},
+    {"no": 140, "date": "1987-07-15", "time": "05:50", "gender": "F", "location": "포항", "purpose": ""},
+    {"no": 141, "date": "1988-02-04", "time": "22:45", "gender": "M", "location": "제주", "purpose": ""},
+    {"no": 142, "date": "1989-10-25", "time": "13:00", "gender": "F", "location": "진주", "purpose": ""},
+    {"no": 143, "date": "1990-06-21", "time": "09:15", "gender": "M", "location": "의정부", "purpose": ""},
+    {"no": 144, "date": "1991-12-31", "time": "23:55", "gender": "F", "location": "파주", "purpose": ""},
+    {"no": 145, "date": "1992-05-05", "time": "04:30", "gender": "M", "location": "양주", "purpose": ""},
+    {"no": 146, "date": "1993-01-01", "time": "11:20", "gender": "F", "location": "구리", "purpose": ""},
+    {"no": 147, "date": "1994-08-08", "time": "17:40", "gender": "M", "location": "안성", "purpose": ""},
+    {"no": 148, "date": "1995-03-21", "time": "23:10", "gender": "F", "location": "군포", "purpose": ""},
+    {"no": 149, "date": "1996-10-10", "time": "02:05", "gender": "M", "location": "이천", "purpose": ""},
+    {"no": 150, "date": "1997-07-07", "time": "08:55", "gender": "F", "location": "하남", "purpose": ""},
+    {"no": 151, "date": "1998-12-25", "time": "15:35", "gender": "M", "location": "오산", "purpose": ""},
+    {"no": 152, "date": "1999-05-20", "time": "21:15", "gender": "F", "location": "서산", "purpose": ""},
+    {"no": 153, "date": "2000-01-20", "time": "10:45", "gender": "M", "location": "충주", "purpose": ""},
+    {"no": 154, "date": "2001-04-10", "time": "16:20", "gender": "F", "location": "제천", "purpose": ""},
+    {"no": 155, "date": "2002-11-11", "time": "03:10", "gender": "M", "location": "논산", "purpose": ""},
+    {"no": 156, "date": "2003-08-15", "time": "09:40", "gender": "F", "location": "서울", "purpose": ""},
+    {"no": 157, "date": "2004-03-05", "time": "15:55", "gender": "M", "location": "부산", "purpose": ""},
+    {"no": 158, "date": "2005-06-06", "time": "22:25", "gender": "F", "location": "대구", "purpose": ""},
+    {"no": 159, "date": "2006-01-05", "time": "05:10", "gender": "M", "location": "인천", "purpose": ""},
+    {"no": 160, "date": "2007-09-09", "time": "12:50", "gender": "F", "location": "광주", "purpose": ""},
+    {"no": 161, "date": "2008-12-31", "time": "23:59", "gender": "M", "location": "대전", "purpose": ""},
+    {"no": 162, "date": "2009-05-05", "time": "08:35", "gender": "F", "location": "울산", "purpose": ""},
+    {"no": 163, "date": "2010-02-04", "time": "11:48", "gender": "M", "location": "수원", "purpose": ""},
+    {"no": 164, "date": "2011-10-10", "time": "18:05", "gender": "F", "location": "창원", "purpose": ""},
+    {"no": 165, "date": "2012-07-07", "time": "00:40", "gender": "M", "location": "성남", "purpose": ""},
+    {"no": 166, "date": "2013-03-21", "time": "07:15", "gender": "F", "location": "청주", "purpose": ""},
+    {"no": 167, "date": "2014-01-01", "time": "14:55", "gender": "M", "location": "전주", "purpose": ""},
+    {"no": 168, "date": "2015-08-08", "time": "21:30", "gender": "F", "location": "천안", "purpose": ""},
+    {"no": 169, "date": "2016-04-05", "time": "04:10", "gender": "M", "location": "안산", "purpose": ""},
+    {"no": 170, "date": "2017-02-04", "time": "00:34", "gender": "F", "location": "김해", "purpose": ""},
+    {"no": 171, "date": "2018-11-25", "time": "09:50", "gender": "M", "location": "포항", "purpose": ""},
+    {"no": 172, "date": "2019-06-21", "time": "16:20", "gender": "F", "location": "제주", "purpose": ""},
+    {"no": 173, "date": "2020-10-10", "time": "23:05", "gender": "M", "location": "진주", "purpose": ""},
+    {"no": 174, "date": "2021-12-31", "time": "23:45", "gender": "F", "location": "의정부", "purpose": ""},
+    {"no": 175, "date": "2022-03-05", "time": "23:43", "gender": "M", "location": "파주", "purpose": ""},
+    {"no": 176, "date": "2023-02-04", "time": "11:42", "gender": "F", "location": "양주", "purpose": ""},
+    {"no": 177, "date": "2023-08-08", "time": "03:22", "gender": "M", "location": "구리", "purpose": ""},
+    {"no": 178, "date": "2024-03-05", "time": "11:22", "gender": "F", "location": "안성", "purpose": ""},
+    {"no": 179, "date": "2024-06-05", "time": "13:09", "gender": "M", "location": "군포", "purpose": ""},
+    {"no": 180, "date": "2024-09-22", "time": "21:43", "gender": "F", "location": "이천", "purpose": ""},
+    {"no": 181, "date": "2025-01-01", "time": "00:03", "gender": "M", "location": "하남", "purpose": ""},
+    {"no": 182, "date": "2025-03-05", "time": "17:07", "gender": "F", "location": "오산", "purpose": ""},
+    {"no": 183, "date": "2025-05-05", "time": "15:00", "gender": "M", "location": "서산", "purpose": ""},
+    {"no": 184, "date": "2025-07-07", "time": "11:25", "gender": "F", "location": "충주", "purpose": ""},
+    {"no": 185, "date": "2025-09-07", "time": "13:51", "gender": "M", "location": "제천", "purpose": ""},
+    {"no": 186, "date": "2025-11-07", "time": "07:46", "gender": "F", "location": "논산", "purpose": ""},
+    {"no": 187, "date": "2025-12-31", "time": "23:55", "gender": "M", "location": "서울", "purpose": ""},
+    {"no": 188, "date": "2026-01-05", "time": "11:49", "gender": "F", "location": "부산", "purpose": ""},
+    {"no": 189, "date": "2026-02-04", "time": "11:33", "gender": "M", "location": "대구", "purpose": ""},
+    {"no": 190, "date": "2026-03-20", "time": "11:45", "gender": "F", "location": "인천", "purpose": ""},
+    {"no": 191, "date": "2026-04-05", "time": "05:48", "gender": "M", "location": "광주", "purpose": ""},
+    {"no": 192, "date": "2026-05-05", "time": "09:30", "gender": "F", "location": "대전", "purpose": ""},
+    {"no": 193, "date": "2026-06-06", "time": "02:00", "gender": "M", "location": "울산", "purpose": ""},
+    {"no": 194, "date": "2026-07-07", "time": "18:40", "gender": "F", "location": "수원", "purpose": ""},
+    {"no": 195, "date": "2026-08-07", "time": "15:50", "gender": "M", "location": "창원", "purpose": ""},
+    {"no": 196, "date": "2026-09-07", "time": "21:00", "gender": "F", "location": "성남", "purpose": ""},
+    {"no": 197, "date": "2026-10-08", "time": "04:20", "gender": "M", "location": "청주", "purpose": ""},
+    {"no": 198, "date": "2026-11-07", "time": "13:30", "gender": "F", "location": "전주", "purpose": ""},
+    {"no": 199, "date": "2026-12-07", "time": "07:00", "gender": "M", "location": "천안", "purpose": ""},
+    {"no": 200, "date": "2026-12-31", "time": "23:59", "gender": "F", "location": "서울", "purpose": ""}
+]
 def main():
     """메인 실행 함수"""
     import argparse
     
     parser = argparse.ArgumentParser(description="포스텔러 만세력 자동 테스트")
-    parser.add_argument("--start", type=int, default=1, help="시작 테스트 번호")
-    parser.add_argument("--end", type=int, default=30, help="종료 테스트 번호")
+    parser.add_argument("--start", type=int, default=31, help="시작 테스트 번호")
+    parser.add_argument("--end", type=int, default=200, help="종료 테스트 번호")
     parser.add_argument("--single", type=int, help="단일 테스트 번호")
     args = parser.parse_args()
     
