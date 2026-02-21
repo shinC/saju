@@ -877,21 +877,53 @@ class ForceTellerTester:
                 ft_year_pillar, ft_month_pillar, ft_day_pillar, ft_hour_pillar,
                 ft_correction_minutes, ft_summer_time_minutes, ft_zodiac,
                 
+                -- 오행 분포 (4가지 설정)
                 ft_wood, ft_fire, ft_earth, ft_metal, ft_water,
+                ft_wood_hap, ft_fire_hap, ft_earth_hap, ft_metal_hap, ft_water_hap,
+                ft_wood_johoo, ft_fire_johoo, ft_earth_johoo, ft_metal_johoo, ft_water_johoo,
                 ft_wood_adj, ft_fire_adj, ft_earth_adj, ft_metal_adj, ft_water_adj,
                 
+                -- 십성 분포 (4가지 설정)
                 ft_bigyeon, ft_geobje, ft_siksin, ft_sanggwan, ft_pyeonjae,
                 ft_jeongjae, ft_pyeongwan, ft_jeonggwan, ft_pyeonin, ft_jeongin,
+                ft_bigyeon_hap, ft_geobje_hap, ft_siksin_hap, ft_sanggwan_hap, ft_pyeonjae_hap,
+                ft_jeongjae_hap, ft_pyeongwan_hap, ft_jeonggwan_hap, ft_pyeonin_hap, ft_jeongin_hap,
+                ft_bigyeon_johoo, ft_geobje_johoo, ft_siksin_johoo, ft_sanggwan_johoo, ft_pyeonjae_johoo,
+                ft_jeongjae_johoo, ft_pyeongwan_johoo, ft_jeonggwan_johoo, ft_pyeonin_johoo, ft_jeongin_johoo,
+                ft_bigyeon_adj, ft_geobje_adj, ft_siksin_adj, ft_sanggwan_adj, ft_pyeonjae_adj,
+                ft_jeongjae_adj, ft_pyeongwan_adj, ft_jeonggwan_adj, ft_pyeonin_adj, ft_jeongin_adj,
                 
-                ft_strength, ft_strength_adj,
-                ft_yongsin, ft_yongsin_adj,
+                -- 신강/신약 (4가지 설정)
+                ft_strength, ft_strength_hap, ft_strength_johoo, ft_strength_adj,
+                
+                -- 용신 (4가지 설정)
+                ft_yongsin, ft_yongsin_hap, ft_yongsin_johoo, ft_yongsin_adj,
                 ft_sinsal,
                 
+                -- 내 엔진 사주팔자
                 my_year_pillar, my_month_pillar, my_day_pillar, my_hour_pillar,
                 
+                -- 내 엔진 오행 분포 (4가지 설정)
                 my_wood, my_fire, my_earth, my_metal, my_water,
+                my_wood_hap, my_fire_hap, my_earth_hap, my_metal_hap, my_water_hap,
+                my_wood_johoo, my_fire_johoo, my_earth_johoo, my_metal_johoo, my_water_johoo,
+                my_wood_adj, my_fire_adj, my_earth_adj, my_metal_adj, my_water_adj,
                 
-                my_strength, my_yongsin,
+                -- 내 엔진 십성 분포 (4가지 설정)
+                my_bigyeon, my_geobje, my_siksin, my_sanggwan, my_pyeonjae,
+                my_jeongjae, my_pyeongwan, my_jeonggwan, my_pyeonin, my_jeongin,
+                my_bigyeon_hap, my_geobje_hap, my_siksin_hap, my_sanggwan_hap, my_pyeonjae_hap,
+                my_jeongjae_hap, my_pyeongwan_hap, my_jeonggwan_hap, my_pyeonin_hap, my_jeongin_hap,
+                my_bigyeon_johoo, my_geobje_johoo, my_siksin_johoo, my_sanggwan_johoo, my_pyeonjae_johoo,
+                my_jeongjae_johoo, my_pyeongwan_johoo, my_jeonggwan_johoo, my_pyeonin_johoo, my_jeongin_johoo,
+                my_bigyeon_adj, my_geobje_adj, my_siksin_adj, my_sanggwan_adj, my_pyeonjae_adj,
+                my_jeongjae_adj, my_pyeongwan_adj, my_jeonggwan_adj, my_pyeonin_adj, my_jeongin_adj,
+                
+                -- 내 엔진 신강/신약 (4가지 설정)
+                my_strength, my_strength_hap, my_strength_johoo, my_strength_adj,
+                
+                -- 내 엔진 용신 (4가지 설정)
+                my_yongsin, my_yongsin_hap, my_yongsin_johoo, my_yongsin_adj,
                 
                 pillar_match, element_diff_max, strength_match
             ) VALUES (
@@ -899,20 +931,45 @@ class ForceTellerTester:
                 ?, ?, ?, ?,
                 ?, ?, ?,
                 
+                -- 오행 분포 (base, hap, johoo, adj)
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 
+                -- 십성 분포 (base, hap, johoo, adj)
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 
-                ?, ?,
-                ?, ?,
-                ?,
-                
+                -- 신강/신약 (base, hap, johoo, adj)
                 ?, ?, ?, ?,
                 
+                -- 용신 (base, hap, johoo, adj)
+                ?, ?, ?, ?,
+                ?,
+                
+                -- 내 엔진 사주팔자
+                ?, ?, ?, ?,
+                
+                -- 내 엔진 오행 분포 (base, hap, johoo, adj)
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 
-                ?, ?,
+                -- 내 엔진 십성 분포 (base, hap, johoo, adj)
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                
+                -- 내 엔진 신강/신약 (base, hap, johoo, adj)
+                ?, ?, ?, ?,
+                
+                -- 내 엔진 용신 (base, hap, johoo, adj)
+                ?, ?, ?, ?,
                 
                 ?, ?, ?
             )
@@ -924,22 +981,65 @@ class ForceTellerTester:
             ft_pillars.get("년주"), ft_pillars.get("월주"), ft_pillars.get("일주"), ft_pillars.get("시주"),
             ft_meta.get("correction_minutes"), ft_meta.get("summer_time_minutes"), ft_meta.get("zodiac"),
             
+            # 오행 분포 - base
             get_elem(ft_base, "목"), get_elem(ft_base, "화"), get_elem(ft_base, "토"), get_elem(ft_base, "금"), get_elem(ft_base, "수"),
+            # 오행 분포 - hap
+            get_elem(ft_hap, "목"), get_elem(ft_hap, "화"), get_elem(ft_hap, "토"), get_elem(ft_hap, "금"), get_elem(ft_hap, "수"),
+            # 오행 분포 - johoo
+            get_elem(ft_johoo, "목"), get_elem(ft_johoo, "화"), get_elem(ft_johoo, "토"), get_elem(ft_johoo, "금"), get_elem(ft_johoo, "수"),
+            # 오행 분포 - adj
             get_elem(ft_adj, "목"), get_elem(ft_adj, "화"), get_elem(ft_adj, "토"), get_elem(ft_adj, "금"), get_elem(ft_adj, "수"),
             
+            # 십성 분포 - base
             get_tg(ft_base, "비견"), get_tg(ft_base, "겁재"), get_tg(ft_base, "식신"), get_tg(ft_base, "상관"), get_tg(ft_base, "편재"),
             get_tg(ft_base, "정재"), get_tg(ft_base, "편관"), get_tg(ft_base, "정관"), get_tg(ft_base, "편인"), get_tg(ft_base, "정인"),
+            # 십성 분포 - hap
+            get_tg(ft_hap, "비견"), get_tg(ft_hap, "겁재"), get_tg(ft_hap, "식신"), get_tg(ft_hap, "상관"), get_tg(ft_hap, "편재"),
+            get_tg(ft_hap, "정재"), get_tg(ft_hap, "편관"), get_tg(ft_hap, "정관"), get_tg(ft_hap, "편인"), get_tg(ft_hap, "정인"),
+            # 십성 분포 - johoo
+            get_tg(ft_johoo, "비견"), get_tg(ft_johoo, "겁재"), get_tg(ft_johoo, "식신"), get_tg(ft_johoo, "상관"), get_tg(ft_johoo, "편재"),
+            get_tg(ft_johoo, "정재"), get_tg(ft_johoo, "편관"), get_tg(ft_johoo, "정관"), get_tg(ft_johoo, "편인"), get_tg(ft_johoo, "정인"),
+            # 십성 분포 - adj
+            get_tg(ft_adj, "비견"), get_tg(ft_adj, "겁재"), get_tg(ft_adj, "식신"), get_tg(ft_adj, "상관"), get_tg(ft_adj, "편재"),
+            get_tg(ft_adj, "정재"), get_tg(ft_adj, "편관"), get_tg(ft_adj, "정관"), get_tg(ft_adj, "편인"), get_tg(ft_adj, "정인"),
             
-            ft_base.get("strength"), ft_adj.get("strength"),
-            ft_base.get("yongsin"), ft_adj.get("yongsin"),
+            # 신강/신약 (base, hap, johoo, adj)
+            ft_base.get("strength"), ft_hap.get("strength"), ft_johoo.get("strength"), ft_adj.get("strength"),
+            
+            # 용신 (base, hap, johoo, adj)
+            ft_base.get("yongsin"), ft_hap.get("yongsin"), ft_johoo.get("yongsin"), ft_adj.get("yongsin"),
             ft_meta.get("sinsal"),
             
-            # 내 엔진 데이터
+            # 내 엔진 사주팔자
             my_pillars[0], my_pillars[1], my_pillars[2], my_pillars[3],
             
+            # 내 엔진 오행 분포 - base
             get_elem(my_base, "목"), get_elem(my_base, "화"), get_elem(my_base, "토"), get_elem(my_base, "금"), get_elem(my_base, "수"),
+            # 내 엔진 오행 분포 - hap
+            get_elem(my_hap, "목"), get_elem(my_hap, "화"), get_elem(my_hap, "토"), get_elem(my_hap, "금"), get_elem(my_hap, "수"),
+            # 내 엔진 오행 분포 - johoo
+            get_elem(my_johoo, "목"), get_elem(my_johoo, "화"), get_elem(my_johoo, "토"), get_elem(my_johoo, "금"), get_elem(my_johoo, "수"),
+            # 내 엔진 오행 분포 - adj
+            get_elem(my_adj, "목"), get_elem(my_adj, "화"), get_elem(my_adj, "토"), get_elem(my_adj, "금"), get_elem(my_adj, "수"),
             
-            my_base.get("strength"), my_base.get("yongsin"),
+            # 내 엔진 십성 분포 - base
+            get_tg(my_base, "비견"), get_tg(my_base, "겁재"), get_tg(my_base, "식신"), get_tg(my_base, "상관"), get_tg(my_base, "편재"),
+            get_tg(my_base, "정재"), get_tg(my_base, "편관"), get_tg(my_base, "정관"), get_tg(my_base, "편인"), get_tg(my_base, "정인"),
+            # 내 엔진 십성 분포 - hap
+            get_tg(my_hap, "비견"), get_tg(my_hap, "겁재"), get_tg(my_hap, "식신"), get_tg(my_hap, "상관"), get_tg(my_hap, "편재"),
+            get_tg(my_hap, "정재"), get_tg(my_hap, "편관"), get_tg(my_hap, "정관"), get_tg(my_hap, "편인"), get_tg(my_hap, "정인"),
+            # 내 엔진 십성 분포 - johoo
+            get_tg(my_johoo, "비견"), get_tg(my_johoo, "겁재"), get_tg(my_johoo, "식신"), get_tg(my_johoo, "상관"), get_tg(my_johoo, "편재"),
+            get_tg(my_johoo, "정재"), get_tg(my_johoo, "편관"), get_tg(my_johoo, "정관"), get_tg(my_johoo, "편인"), get_tg(my_johoo, "정인"),
+            # 내 엔진 십성 분포 - adj
+            get_tg(my_adj, "비견"), get_tg(my_adj, "겁재"), get_tg(my_adj, "식신"), get_tg(my_adj, "상관"), get_tg(my_adj, "편재"),
+            get_tg(my_adj, "정재"), get_tg(my_adj, "편관"), get_tg(my_adj, "정관"), get_tg(my_adj, "편인"), get_tg(my_adj, "정인"),
+            
+            # 내 엔진 신강/신약 (base, hap, johoo, adj)
+            my_base.get("strength"), my_hap.get("strength"), my_johoo.get("strength"), my_adj.get("strength"),
+            
+            # 내 엔진 용신 (base, hap, johoo, adj)
+            my_base.get("yongsin"), my_hap.get("yongsin"), my_johoo.get("yongsin"), my_adj.get("yongsin"),
             
             comparison["pillar_match"], comparison["element_diff_max"], comparison["strength_match"]
         ))
@@ -1431,8 +1531,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="포스텔러 만세력 자동 테스트")
-    parser.add_argument("--start", type=int, default=31, help="시작 테스트 번호")
-    parser.add_argument("--end", type=int, default=200, help="종료 테스트 번호")
+    parser.add_argument("--start", type=int, default=1, help="시작 테스트 번호")
+    parser.add_argument("--end", type=int, default=30, help="종료 테스트 번호")
     parser.add_argument("--single", type=int, help="단일 테스트 번호")
     args = parser.parse_args()
     
