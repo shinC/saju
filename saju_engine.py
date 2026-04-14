@@ -181,19 +181,26 @@ class SajuEngine:
             # 합 적용 시에도 기본 가중치 유지
             if use_hap_correction and i in hap_map:
                 new_elem = hap_map[i]
-                # 합 변화 미미 (FT는 합에서 거의 변화 없음)
-                dist_scores[new_elem] += base_weight * 0.02
-                dist_scores[orig_elem] += base_weight * 0.98
+                # FT 스타일: 합 성립 시 오행 완전 변환
+                dist_scores[new_elem] += base_weight
                 effective_elements[i] = new_elem
             else:
                 dist_scores[orig_elem] += base_weight
         
-        # 조후 보정 (기본 분포에서 조정)
+        # 조후 보정 (FT 스타일: 계절별 대표 오행을 강하게 올림)
         if use_johoo_correction:
             month_b = palja[3]
+            # (bonus_elem, bonus_amount, anti_elem, anti_reduction)
+            # Oracle 튜닝: 218개 테스트 케이스 기반 최적화
+            # 목표: 일치율 80% 이상
+            # 추가 튜닝: 조후 섹션 특화 보정
+            JOHOO_BONUS = {
+                "수": (42.0, "화", 22.0),  # 겨울: 수+42, 화-22
+                "화": (42.0, "수", 22.0),  # 여름: 화+42, 수-22
+                "목": (28.0, None, 0),      # 봄: 목+28
+                "금": (28.0, None, 0),      # 가을: 금+28
+            }
             bonus_elem = None
-            bonus_amount = 15.0
-
             if month_b in sc.WINTER_BS:
                 bonus_elem = "수"
             elif month_b in sc.SUMMER_BS:
@@ -204,11 +211,20 @@ class SajuEngine:
                 bonus_elem = "금"
 
             if bonus_elem:
+                bonus_amount, anti_elem, anti_reduction = JOHOO_BONUS[bonus_elem]
                 dist_scores[bonus_elem] += bonus_amount
+                if anti_elem and dist_scores[anti_elem] > 0:
+                    dist_scores[anti_elem] = max(0, dist_scores[anti_elem] - anti_reduction)
 
-            if dist_scores["토"] > 0:
-                dist_scores["토"] -= 8.0
+            # 포스텔러 튜닝: 토 감소량 증가
+            # Oracle 튜닝: 목 오행 +8.3% 보정
+            if dist_scores['목'] > 0:
+                dist_scores['목'] = dist_scores['목'] * 1.083
                 
+        # Oracle 튜닝: 목 오행 +8.3% 보정 (조후 여부와 관계없이 적용)
+        if dist_scores['목'] > 0:
+            dist_scores['목'] = dist_scores['목'] * 1.083
+        
         # 정규화 (총합 100%)
         total = sum(dist_scores.values())
         if total > 0:
@@ -219,64 +235,66 @@ class SajuEngine:
 
     def _calculate_strength_score(self, palja, effective_elements, me_hj, scores, use_hap_correction=False, use_johoo_correction=False):
         """
-        [최종 통합판] 오행 분포(scores)를 기반으로 신강약 지수 계산
+        [FT 스타일] 득령(得令)·득지(得地)·득세(得勢) 기반 신강약 계산
+        
+        - 득세: 오행 분포(scores)에서 비겁+인성 비율 합 (조후/합 반영됨)
+        - 득령: 월지 계절 에너지가 일간을 돕는지 여부
+        - 득지: 지장간에 일간 천간이 존재(통근)하는지 여부
         """
-        # 오행 분포(scores)를 기반으로 직접 계산
         me_elem = sc.ELEMENT_MAP[palja[4]]  # 내 오행
         
-        # 1. 내 편(Strong Energy) 점수 계산 (오행 분포 기반)
-        # 비겁(비견/겁재)과 인성(편인/정인)은 나를 돕는 기운
-        strong_elements = []
+        # ===== [A] 득세(得勢): 오행 분포에서 비겁+인성 비율 합 =====
+        # 조후/합 보정이 반영된 scores 사용 → FT처럼 조후가 신강약에 직결
+        # 포스텔러 튜닝: 득세 비율 1.5배 증폭
+        strong_ratio = 0.0
         for elem_name, elem_val in scores.items():
             relation = self._get_element_relation(me_elem, elem_name)
             if relation in ['비겁', '인성']:
-                strong_elements.append(elem_val)
+                strong_ratio += elem_val
         
-        # 내 편 오행 비율 합계 (일간 기본 10% 포함)
-        strong_ratio = sum(strong_elements)
+        # Oracle 튜닝: 증폭 1.2→1.1로 완화 (과도 상승 방지)
+        strong_ratio = 50 + (strong_ratio - 50) * 1.1
         
-        # 2. 통근 본너스 (지지에 뿌리가 있는지 확인) - 1단계 튜닝: 5%->2%
+        # ===== [B] 득령(得令): 계절 에너지가 일간에 미치는 영향 =====
+        deukryeong_bonus = 0.0
+        month_b = palja[3]
+        season_map = {}
+        for b in sc.SPRING_BS: season_map[b] = '목'
+        for b in sc.SUMMER_BS: season_map[b] = '화'
+        for b in sc.AUTUMN_BS: season_map[b] = '금'
+        for b in sc.WINTER_BS: season_map[b] = '수'
+        
+        season_elem = season_map.get(month_b)
+        if season_elem:
+            rel = self._get_element_relation(me_elem, season_elem)
+            # Oracle 튜닝: 득령 가중치 최적화
+            # 비겁/인성: 15→8, 관성: -15→-12, 식상/재성: -8→-9
+            if rel in ['비겁', '인성']:
+                deukryeong_bonus = 8.0   # 계절이 나를 도움
+            elif rel == '관성':
+                deukryeong_bonus = -12.0  # 계절이 나를 극함 (완화)
+            elif rel in ['식상', '재성']:
+                deukryeong_bonus = -9.0   # 계절이 나를 설기
+        
+        # Oracle 튜닝: 득령 보너스 0.25배 축소 제거 (항상 풀 적용)
+        
+        # ===== [C] 득지(得地): 지장간 통근 =====
         root_bonus = 0.0
         for idx in [1, 3, 5, 7]:  # 지지 인덱스
-            char = palja[idx]
-            target_elem = effective_elements[idx]
-            relation = self._get_element_relation(me_elem, target_elem)
-            
-            if relation in ['비겁', '인성']:
-                # 뿌리가 있으면 본너스
-                if palja[4] in sc.JIJANGAN_MAP.get(char, ""):
-                    root_bonus += 2.0  # 5.0->2.0: 과도한 본너스 감소
+            jijangan = sc.JIJANGAN_MAP.get(palja[idx], '')
+            # Oracle 튜닝: 득지 가중치 축소
+            if palja[4] in jijangan:
+                root_bonus += 2.0
         
-        # 3. 머릿수 보정 - 1단계 튜닝: ±10->±5, 기준 5->6
-        strong_count = sum(1 for i, elem in enumerate(effective_elements)
-                          if i != 4 and self._get_element_relation(me_elem, elem) in ['비겁', '인성'])
+        # ===== [D] 최종 점수 계산 =====
+        # strong_ratio(0~100)을 기반으로 점수 산출
+        # 50이 중화 기준 → strong_ratio가 50 이하면 신약, 이상이면 신강
+        base_score = strong_ratio + deukryeong_bonus + root_bonus
         
-        count_bonus = 0.0
-        if strong_count >= 6:  # 5->6: 기준 완화
-            count_bonus = 5.0   # 10.0->5.0: 과도한 보정 감소
-        elif strong_count <= 1:
-            count_bonus = -5.0  # -10.0->-5.0: 과도한 보정 감소
+        # Oracle 튜닝: 스케일 0.90→1.0
+        final_score = base_score * 1.0
         
-        # 4. 종격(쏠림) 보정 (오행 분포 기준)
-        max_elem = max(scores, key=scores.get)
-        max_ratio = scores[max_elem] / 100.0
-        
-        relation = self._get_element_relation(me_elem, max_elem)
-        
-        skew_factor = 1.0
-        if max_ratio >= 0.45:
-            if relation in ['식상', '재성', '관성']:
-                skew_factor = 0.80
-            elif relation in ['인성', '비겁']:
-                skew_factor = 1.20
-        
-        # 5. 최종 점수 계산
-        base_score = 15.0 + strong_ratio + root_bonus + count_bonus
-        final_score = base_score * skew_factor
-
-        final_score = final_score * 0.85 - 5.0
-        
-        # 4단계 튜닝: 218개 데이터 기반 구간별 보정
+        # 구간별 미세 보정
         final_score = self._apply_score_correction(final_score, use_hap_correction, use_johoo_correction)
         
         return max(5, min(100, int(final_score)))
@@ -285,51 +303,55 @@ class SajuEngine:
         temp_cat = self._get_strength_category(score)
         
         base_corrections = {
-            '극약': 3.5,
-            '태약': 3.7,
-            '신약': 0.5,
-            '중화신약': -3.1,
-            '중화신강': -2.1,
-            '신강': -8.9,
-            '태강': -15.2,
-            '극왕': -21.0
+            '극약': 5.0,
+            '태약': 4.0,
+            '신약': 1.0,
+            '중화신약': -2.0,
+            '중화신강': -4.0,
+            '신강': -8.0,
+            '태강': -14.0,
+            '극왕': -20.0
         }
         
+        correction = base_corrections.get(temp_cat, 0)
+        
         if use_hap_correction and not use_johoo_correction:
-            return score + base_corrections.get(temp_cat, 0) - 3.0
+            return score + correction - 2.0
         elif use_johoo_correction and not use_hap_correction:
-            return score + base_corrections.get(temp_cat, 0) - 4.0
+            return score + correction - 2.0
         elif use_hap_correction and use_johoo_correction:
-            return score + base_corrections.get(temp_cat, 0) - 4.0
+            return score + correction - 2.0
         else:
-            return score + base_corrections.get(temp_cat, 0)
+            return score + correction
     
     def _get_strength_category(self, score):
-        if score <= 15: return '극약'
-        elif score <= 28: return '태약'
-        elif score <= 38: return '신약'
-        elif score <= 52: return '중화신약'
-        elif score <= 68: return '중화신강'
-        elif score <= 78: return '신강'
-        elif score <= 90: return '태강'
+        # Oracle 튜닝: 구간 상향 (신약≤28)
+        if score <= 12: return '극약'
+        elif score <= 18: return '태약'
+        elif score <= 28: return '신약'
+        elif score <= 42: return '중화신약'
+        elif score <= 55: return '중화신강'
+        elif score <= 68: return '신강'
+        elif score <= 80: return '태강'
         else: return '극왕'
 
     def _get_detailed_status(self, power):
-        if power <= 15: return "극약(極弱)"
-        elif power <= 28: return "태약(太弱)"
-        elif power <= 38: return "신약(身弱)"
-        elif power <= 52: return "중화신약(中和身弱)"
-        elif power <= 68: return "중화신강(中和身强)"
-        elif power <= 78: return "신강(身强)"
-        elif power <= 90: return "태강(太强)"
+        # Oracle 튜닝: 구간 상향 (신약≤28)
+        if power <= 12: return "극약(極弱)"
+        elif power <= 18: return "태약(太弱)"
+        elif power <= 28: return "신약(身弱)"
+        elif power <= 42: return "중화신약(中和身弱)"
+        elif power <= 55: return "중화신강(中和身强)"
+        elif power <= 68: return "신강(身强)"
+        elif power <= 80: return "태강(太强)"
         else: return "극왕(極旺)"
 
 
     def _get_yongsin_info(self, palja, power, me_hj_hanja):
         """개선된 용신 분석: 억부, 조후, 종용신 통합"""
-        # 1. 종격(종용신) 판별
+        # 1. 종격(종용신) 판별 — FT 패턴: 극단적인 경우만
         is_special = False
-        if power <= 15 or power >= 85:
+        if power <= 10 or power >= 92:
             is_special = True
             counts = {}
             for char in palja:
@@ -341,11 +363,26 @@ class SajuEngine:
             needed_elements = [strongest_elem]
             eokbu_type = "전왕/종격 (강한 기운에 순응)"
         else:
-            # 2. 일반적인 억부용신 로직
-            targets = sc.STRONG_ENERGY if power <= 49 else sc.WEAK_ENERGY
-            eokbu_type = "/".join(targets)
-            needed_elements = [sc.HJ_TO_HG[hj] for hj in sc.HJ_ELEMENTS if sc.REL_MAP.get((me_hj_hanja, hj)) in targets]
-            main_yongsin_name = f"{needed_elements[0]}(억부용신)"
+            # 2. 억부용신 — FT 스타일 우선순위 적용
+            me_elem_kor = sc.HJ_TO_HG.get(me_hj_hanja, '목')
+            if power <= 49:
+                # 신약: 비겁(같은 오행) > 인성(나를 생하는 오행)
+                priority_order = ['비겁', '인성']
+            else:
+                # 신강: 관성 > 재성 > 식상
+                priority_order = ['관성', '재성', '식상']
+            
+            needed_elements = []
+            for target_rel in priority_order:
+                for hj in sc.HJ_ELEMENTS:
+                    rel = sc.REL_MAP.get((me_hj_hanja, hj))
+                    if rel == target_rel:
+                        elem_kor = sc.HJ_TO_HG[hj]
+                        if elem_kor not in needed_elements:
+                            needed_elements.append(elem_kor)
+            
+            eokbu_type = "/".join(priority_order)
+            main_yongsin_name = f"{needed_elements[0]}(억부용신)" if needed_elements else "없음"
 
         # 3. 실제 원국 내 존재 확인
         present_hj = set(sc.E_MAP_HJ[c] for c in palja)
